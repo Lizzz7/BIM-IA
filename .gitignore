@@ -1,0 +1,28 @@
+# Credenciales y configuración local
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Archivos generados
+**/bin/
+**/bin_out/
+**/obj/
+__pycache__/
+*.py[cod]
+.vs/
+.idea/
+*.user
+*.suo
+
+# Respaldos y temporales
+Respaldos/
+*.????.rvt
+*.bak
+*.tmp
+~$*
+.DS_Store
+Thumbs.db
