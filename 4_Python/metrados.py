@@ -23,6 +23,10 @@ SUPUESTOS = [
     ("Encofrado de columnas, placas y muros", "Caras laterales del sólido de Revit (incluye cabezas); no descuenta contactos entre elementos"),
     ("Encofrado de losas", "Cara inferior + bordes del sólido"),
     ("f'c sin dato", f"Si el tipo o material no indica f'c se asume {FC_DEFECTO} kg/cm2"),
+    ("f'c de columnas", f"Se toma del material estructural de cada columna (criterio del Power BI), no del nombre del tipo; "
+                        f"material sin f'c = {FC_DEFECTO} kg/cm2. Ej.: C-6-Circular (tipo dice 350, material 280 / genérico) va a 280"),
+    ("Concreto de rampas vehiculares", "Parámetro 04_VOLUMEN de cada rampa (criterio del Power BI); la categoría Rampas de Revit no trae volumen. "
+                                       "El sólido del modelo (cara x 0.20 m) da menos: ver hoja de metrados"),
     ("Terreno natural", f"Cota {COTA_TERRENO:+.2f} m; excavación masiva = huella del sótano x (terreno - fondo de cimentación)"),
     ("Esponjamiento", f"{ESPONJAMIENTO} para eliminación de material"),
     ("Acero de refuerzo", "Cuantías kg/m3 por tipo de elemento (hoja Supuestos, editables); el modelo solo tiene 197 barras"),
@@ -50,13 +54,21 @@ def capas_excavacion(D, filas):
     return capas
 
 
-def fc_de(e):
-    textos = [e.get("tipo") or ""] + [m["material"] or "" for m in e["materiales"]]
+def fc_de(e, g=None):
+    mats = [m["material"] or "" for m in e["materiales"]]
+    # Columnas: el f'c sale SOLO del material estructural (criterio del Power BI); sin f'c en el material -> FC_DEFECTO
+    textos = mats if g == "COL" else [e.get("tipo") or ""] + mats
     for t in textos:
         m = re.search(r"f'?c\s*=?\s*(\d{3})", t, re.I)
         if m:
             return int(m.group(1))
     return FC_DEFECTO
+
+
+def vol_param(s):
+    """'15.00 m³' -> 15.0 (0 si no hay número)."""
+    m = re.search(r"-?\d+(?:[.,]\d+)?", str(s or ""))
+    return float(m.group().replace(",", ".")) if m else 0.0
 
 
 def bh_de(tipo):
@@ -121,8 +133,12 @@ def calcular(ruta_json):
         vol = e["volumen_m3"] or e["volumen_solido_m3"]
         area = e["area_m2"] or e["caras_m2"]["inferior"]
         conc = ESP_ALIGERADO * area if g == "ALI" else vol
+        if g == "RAM":   # rampas: parámetro 04_VOLUMEN (criterio del Power BI); si falta, el sólido del modelo
+            v04 = vol_param((e.get("parametros") or {}).get("I:04_VOLUMEN"))
+            if v04 > 0:
+                conc = v04
         filas.append({
-            "id": e["id"], "g": g, "fc": fc_de(e) if g not in ("SUBZ", "ALB") else None,
+            "id": e["id"], "g": g, "fc": fc_de(e, g) if g not in ("SUBZ", "ALB") else None,
             "tipo": e["tipo"], "familia": e["familia"], "nivel": e["nivel"] or "(sin nivel)",
             "vol": vol, "conc": conc, "area": area, "enc": encofrado(e, g),
             "inf": e["caras_m2"]["inferior"], "caja": e["caja_m"], "largo": e["largo_m"],

@@ -3,7 +3,7 @@
 Fuentes (no se inventa nada):
   datos/nexo_no_datos.json                         actividades, periodos, feriados (4_Python/cronograma_nexo.py)
   ../3_Modelo_y_parametros/parametros_revit_*.json actividades de concreto/acero/encofrado de cada elemento
-  ../5_Documentacion/Presupuesto_*_v2.xlsx          coeficientes de materiales de cada análisis de precios unitarios
+  ../5_Documentacion/Presupuesto_*_v4.xlsx          coeficientes de materiales de cada análisis de precios unitarios
 Uso: python armar_panel.py   (volver a correrlo cuando cambie el cronograma o el presupuesto)
 """
 import json
@@ -17,7 +17,7 @@ from cronograma_nexo import leer_presupuesto  # noqa: E402
 crono = json.loads((AQUI / "datos" / "nexo_no_datos.json").read_text(encoding="utf-8"))
 modelo = crono["proyecto"]["modelo"]
 pr = json.loads((AQUI.parent / "3_Modelo_y_parametros" / f"parametros_revit_{modelo}.json").read_text(encoding="utf-8"))
-pres = AQUI.parent / "5_Documentacion" / f"Presupuesto_Estructuras_{modelo}_v3.xlsx"
+pres = AQUI.parent / "5_Documentacion" / f"Presupuesto_Estructuras_{modelo}_v4.xlsx"   # v4: rampas y columnas con criterio del Power BI
 _, _, _, apu = leer_presupuesto(pres)
 recursos, coef = {}, {}
 for it, a in apu.items():

@@ -18,7 +18,7 @@ from openpyxl import load_workbook
 
 sys.stdout.reconfigure(encoding="utf-8")
 RAIZ = Path(__file__).parent.parent
-XLS = RAIZ / "5_Documentacion" / "Presupuesto_Estructuras_REP0-MOD2-R02_v3.xlsx"
+XLS = RAIZ / "5_Documentacion" / "Presupuesto_Estructuras_REP0-MOD2-R02_v4.xlsx"
 wb = load_workbook(XLS, data_only=True)
 P, A, I, H, Sup = (wb[n] for n in ("Presupuesto", "Análisis de Precios Unitarios", "Precios y Cantidades Recursos", "Hoja de Metrados", "Supuestos y Fuentes"))
 

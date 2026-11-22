@@ -2,7 +2,7 @@
 
 Edificio multifamiliar con 3 sótanos (modelo **REP0-MOD2-R02**), casco estructural. Arequipa.
 Archivos: `Cronograma_Valorizado_REP0-MOD2-R02.xlsx`, `nexo_no_datos.json` (también en `1_Panel\datos\`), `Sectorizacion\*.svg`.
-Generado con `4_Python\cronograma_nexo.py` a partir del modelo y del presupuesto `..._v3.xlsx` (v3: metrados derivados sin redondeo intermedio).
+Generado con `4_Python\cronograma_nexo.py` a partir del modelo y del presupuesto `..._v4.xlsx` (v3: metrados derivados sin redondeo intermedio; v4, 21/11/2026: concreto de rampas = parámetro `04_VOLUMEN` y f'c de columnas según su material estructural, igual que el Power BI; losas aligeradas y escaleras sin cambio).
 
 ## 1. Resumen
 | Dato | Valor |
@@ -11,7 +11,7 @@ Generado con `4_Python\cronograma_nexo.py` a partir del modelo y del presupuesto
 | Fin del casco | 11/11/2027 |
 | Plazo | 312 días calendario · 11 valorizaciones mensuales |
 | Calendario | **lunes a sábado**; domingo y feriados no laborables (incluye 15/08 Arequipa y 25/10 Construcción Civil) |
-| Costo directo programado | S/ 2,410,991.98 (presupuesto v3: S/ 2,410,991.73; diferencia S/ 0.25 por redondear el monto de cada actividad) |
+| Costo directo programado | S/ 2,445,386.60 (presupuesto v4: S/ 2,445,382.48; diferencia S/ 4.12 por redondear a 4 decimales el metrado de cada actividad, sobre todo el global de ensayos 06.02) |
 | Personal promedio | 2 a 22 obreros/día (más subcontratos de excavación y anclajes) |
 
 ## 2. Estructura de desglose (EDT)
@@ -46,7 +46,7 @@ Generado con `4_Python\cronograma_nexo.py` a partir del modelo y del presupuesto
 | Adquisiciones y Recursos | Materiales, horas-hombre y equipos por mes; histograma de personal |
 | Sectorización | Paquetes, sectores, junta, concreto y encofrado por sector |
 | Metrados por Actividad | Cada partida repartida en actividades/sectores según el modelo (base para valorizar por sector) |
-| Presupuesto Base | Copia del presupuesto v2 con control de que el metrado repartido cuadra |
+| Presupuesto Base | Copia del presupuesto v4 con control de que el metrado repartido cuadra |
 | Coeficientes APU | Recursos por unidad de partida (del APU) |
 | Formato Valorización | Plantilla: anterior, del mes, acumulado, saldo, % avance, amortizaciones, retención y neto |
 | Parámetros | Inicio, cuadrillas, feriados, GG/UT/IGV |
