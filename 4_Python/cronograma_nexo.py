@@ -273,10 +273,18 @@ def parametros_revit(ruta, D, filas, acts, part, inicio):
         return it, met, met * P[it]["pu"]
 
     fmt = lambda d: d.strftime("%d/%m/%Y")
+    # Las bovedillas genéricas (aligerado sin losa en el modelo) no son un elemento: su parte se reparte entre las losas
+    # aligeradas de los mismos niveles, para que la suma de los elementos sea igual al metrado del presupuesto.
+    niv_bov = {e["nivel"] for e in D["elementos"] if e["bic"] == "OST_GenericModel" and "BOVEDILLA" in (e["tipo"] or "").upper()}
+    a_bov = sum(f["area"] for f in filas if f["id"] < 0 and f["g"] == "ALI")
+    a_niv = sum(f["area"] for f in filas if f["id"] >= 0 and f["g"] == "ALI" and f["nivel"] in niv_bov)
+    k_bov = 1 + a_bov / a_niv if a_niv > 0 else 1.0
     out = []
     for f in filas:
         if f["id"] < 0:
             continue
+        if f["g"] == "ALI" and f["nivel"] in niv_bov and k_bov != 1.0:
+            f = {**f, "conc": f["conc"] * k_bov, "area": f["area"] * k_bov, "enc": f["enc"] * k_bov}
         g = f["g"]
         if g == "ALB":
             it_c, q_c, m_c = parte("area", g, None, f["area"])
@@ -592,7 +600,7 @@ def excel(ruta, D, filas, paquetes, acts, orden, part, cap, pie, apu, asign, X):
         wsP.column_dimensions[c].width = w
 
     # ---------------- Presupuesto base (valores del presupuesto v2)
-    wsB["A1"] = "PRESUPUESTO BASE (copiado del presupuesto S10 v2)"; wsB["A1"].font = f12b
+    wsB["A1"] = f"PRESUPUESTO BASE (copiado de {PRES_NOMBRE})"; wsB["A1"].font = f12b
     for c, t in enumerate(["Item", "Descripción", "Und.", "Metrado", "Precio S/.", "Parcial S/.", "Metrado repartido", "Diferencia"], 1):
         x = wsB.cell(3, c, t); x.font = f8b; x.border = caja; x.alignment = CEN
     filaB = {}
@@ -1009,6 +1017,7 @@ def exportar_json(ruta, D, filas, paquetes, acts, orden, part, asign, MS):
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     mj, pres, out = sys.argv[1], sys.argv[2], Path(sys.argv[3])
+    PRES_NOMBRE = Path(pres).name
     D, filas, X = M.calcular(mj)
     part, cap, pie, apu = leer_presupuesto(pres)
     CAPITULOS, PIE = cap, {"gg": pie.get("GASTOS GENERALES"), "ut": pie.get("UTILIDAD"), "igv": pie.get("IGV")}

@@ -191,6 +191,9 @@ def construir(ruta_json, salida):
     wsS.cell(r, 1, "CRITERIOS DE METRADO").font = f9b; r += 1
     for a, b in M.SUPUESTOS + [("Dosificación de concreto (por m3)", "f'c 140: 7.01 bol; 210: 9.73; 280: 11.50; 350: 13.60 bol de cemento (referencial; para 350 se recomienda premezclado)"),
                                ("Rendimientos", "Referenciales tipo CAPECO (no es la publicación oficial de CAPECO, que es de pago); ver cada análisis"),
+                               ("Decimales (convención S10)", "Metrado de partida 2 dec. · cantidades del APU 4 dec. · parciales del APU, hora-hombre y P.U. 2 dec. · parcial = ROUND(metrado x P.U.; 2). "
+                                "El P.U. válido para valorizar es el del APU redondeado. Los metrados que dependen de otros (acero, ladrillo, curado, eliminación) se calculan con valores sin redondear")
+                               ,
                                ("Fuentes de precios", "oneestimate.ai (lista de precios Perú, ago-2026; rendimientos, abr-2026); El Peruano (jornales 2026). Precios sin IGV = precio de ferretería / 1.18"),
                                ("Lugar y fecha", f"{LUGAR}, costo al {HOY}. Cotizar en Arequipa antes de usar el presupuesto")]:
         wsS.cell(r, 1, a).font = f9b; wsS.cell(r, 3, b).font = f9; r += 1
@@ -434,9 +437,13 @@ def construir(ruta_json, salida):
             MET[clave] = f"$D${rp}"; FILA[it] = rp
         rp += 1
     # fórmulas de metrado que dependen de otras partidas
-    alias = {"SOLADO": MET["sol"], "EXM": MET["exm"], "EXZ": MET["exz"],
-             "AREA_ALI": MET["e_ALI"], "FPISO": MET["fpi"], "ENC_TOTAL": "+".join(v for k, v in MET.items() if k.startswith("e_")), "VOL_ALB": f"{round(sum(f['vol'] for f in filas if f['g'] == 'ALB'), 4)}"}
-    alias.update({k: v for k, v in MET.items()})
+    # Se usan los metrados SIN redondear (total de la Hoja de Metrados), no los del presupuesto ya redondeados a 2
+    # decimales: así el acero (concreto x cuantía), el ladrillo, el curado y la eliminación no arrastran el redondeo.
+    EXACTO = dict(TOT_M); EXACTO["exm"] = f"{SS}!$M${rt}"
+    ex = lambda k: EXACTO.get(k, MET[k])
+    alias = {"SOLADO": ex("sol"), "EXM": ex("exm"), "EXZ": ex("exz"),
+             "AREA_ALI": ex("e_ALI"), "FPISO": ex("fpi"), "ENC_TOTAL": "+".join(ex(k) for k in MET if k.startswith("e_")), "VOL_ALB": f"{round(sum(f['vol'] for f in filas if f['g'] == 'ALB'), 4)}"}
+    alias.update({k: ex(k) for k in MET})
     for fila, fx in pend:
         for k in sorted(alias, key=len, reverse=True):
             fx = re.sub(r"\b" + re.escape(k) + r"\b", lambda _m, v=alias[k]: v, fx)

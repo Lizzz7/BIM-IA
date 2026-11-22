@@ -2,12 +2,11 @@
 # NEXO OBRA (NO) · Cargar parámetros VZ_ de valorización y control (Revit 2027 · Dynamo 4 · PythonNet3 / CPython 3)
 #
 # MODIFICA EL MODELO (no lo guarda):
-#   1. Crea 15 parámetros compartidos VZ_ (por ejemplar, grupo «Datos de identidad») en las categorías estructurales.
-#   2. Escribe en cada elemento su paquete, sector, actividad, partida, fecha programada, metrados y montos,
+#   1. Crea 9 parámetros compartidos VZ_ de planificación y contrato (por ejemplar, grupo «Datos de identidad»).
+#   2. Escribe en cada elemento su paquete, sector, actividad, partida, fecha programada, metrados y monto contractual,
 #      leídos de parametros_revit_<modelo>.json (lo genera cronograma_nexo.py a partir del cronograma y el presupuesto).
-#   3. NUNCA borra las fechas de ejecución (VZ_Fecha_Acero / Encofrado / Concreto): las respeta y con ellas calcula
-#      VZ_Estado, VZ_Monto_Valorizado y VZ_Valorizacion_N a la fecha de corte.
-#   4. Crea las vistas 3D «VZ - SECTORES» y «VZ - ESTADO» con colores y la tabla «VZ - VALORIZACION».
+#   3. Los metrados EJECUTADOS no van al modelo: se guardan solo en el panel NEXO OBRA (registros_<modelo>.json).
+#   4. Crea la vista 3D «VZ - SECTORES» con colores y la tabla «VZ - VALORIZACION» (datos contractuales).
 # Se puede correr las veces que quieras: no duplica nada, solo actualiza valores.
 #
 # Entradas: IN[0] = ruta del JSON de datos · IN[1] = fecha de corte dd/mm/aaaa (vacío = hoy)
@@ -45,14 +44,7 @@ PARAMETROS = [
     ("VZ_Encofrado_m2", ARE, "Metrado de encofrado del presupuesto", "Dynamo"),
     ("VZ_Acero_kg", NUM, "Acero de refuerzo del presupuesto (kg, por cuantía)", "Dynamo"),
     ("VZ_Monto_Contractual", MON, "Costo directo del elemento: concreto + encofrado + acero (S/ sin IGV)", "Dynamo"),
-    # --- ejecución (las escribe la app NEXO OBRA o el residente; este Dynamo no las borra)
-    ("VZ_Fecha_Acero", TXT, "Fecha real de colocación del acero (dd/mm/aaaa)", "App"),
-    ("VZ_Fecha_Encofrado", TXT, "Fecha real del encofrado (dd/mm/aaaa)", "App"),
-    ("VZ_Fecha_Concreto", TXT, "Fecha real de vaciado (dd/mm/aaaa)", "App"),
-    # --- control (se calculan a la fecha de corte)
-    ("VZ_Estado", TXT, "Programado · Atrasado · En ejecución · Ejecutado · Revisar fecha", "Calculado"),
-    ("VZ_Monto_Valorizado", MON, "Monto valorizado a la fecha de corte (S/ sin IGV)", "Calculado"),
-    ("VZ_Valorizacion_N", ENT, "N° de valorización mensual de la última etapa ejecutada (1 = primer mes de obra)", "Calculado"),
+    # Los metrados ejecutados, fechas reales, estado y monto valorizado viven solo en el panel (no en el modelo).
 ]
 SPEC = {TXT: SpecTypeId.String.Text, ENT: SpecTypeId.Int.Integer, NUM: SpecTypeId.Number,
         VOL: SpecTypeId.Volume, ARE: SpecTypeId.Area, MON: SpecTypeId.Currency}
@@ -190,38 +182,12 @@ try:
             poner(el, "VZ_Fecha_Prog", e["fecha_prog"]),
             poner(el, "VZ_Concreto_m3", m3(e["concreto_m3"])), poner(el, "VZ_Encofrado_m2", m2(e["encofrado_m2"])),
             poner(el, "VZ_Acero_kg", e["acero_kg"]), poner(el, "VZ_Monto_Contractual", monto)])
-        # ejecución: se leen, no se tocan
-        fa, fe, fc = (leer_fecha(texto(el, n)) for n in ("VZ_Fecha_Acero", "VZ_Fecha_Encofrado", "VZ_Fecha_Concreto"))
-        prog = leer_fecha(e["fecha_prog"])
-        if "error" in (fa, fe, fc):
-            estado, val, ult = "Revisar fecha", 0.0, None
-            fechas_malas.append(e["id"])
-        else:
-            hechas = [(d, m) for d, m in ((fa, e["monto_acero"]), (fe, e["monto_encofrado"]), (fc, e["monto_concreto"]))
-                      if d is not None and d <= corte]
-            val = round(sum(m for _, m in hechas), 2)
-            ult = max((d for d, _ in hechas), default=None)
-            if fc is not None and fc <= corte:
-                estado = "Ejecutado"
-            elif hechas:
-                estado = "En ejecución"
-            elif prog and corte > prog:
-                estado = "Atrasado"
-            else:
-                estado = "Programado"
-        n_val = (ult.year - inicio.year) * 12 + ult.month - inicio.month + 1 if ult else 0
-        ok = all([ok, poner(el, "VZ_Estado", estado), poner(el, "VZ_Monto_Valorizado", val),
-                  poner(el, "VZ_Valorizacion_N", n_val)])
         escritos += 1 if ok else 0
-        conteo[estado] = conteo.get(estado, 0) + 1
-        contractual += monto; valorizado_total += val
+        contractual += monto
     reporte.append("Elementos escritos: %d de %d" % (escritos, len(datos["elementos"])))
     if faltan:
         reporte.append("No encontrados en el modelo (%d): %s" % (len(faltan), faltan[:20]))
-    if fechas_malas:
-        reporte.append("Fechas ilegibles (usa dd/mm/aaaa) en: %s" % fechas_malas[:20])
-    reporte.append("Estados: " + " · ".join("%s %d" % kv for kv in sorted(conteo.items())))
-    reporte.append("Contractual S/ {:,.2f} · valorizado S/ {:,.2f}".format(contractual, valorizado_total))
+    reporte.append("Contractual S/ {:,.2f} (los metrados ejecutados se guardan solo en el panel)".format(contractual))
 
     # ------------------------------------------------------------------ 4. filtros, vistas y tabla
     ids_cat = List[ElementId]([Category.GetCategory(doc, b).Id for b in CATEGORIAS
@@ -257,8 +223,7 @@ try:
             v.AddFilter(f.Id)
         v.SetFilterOverrides(f.Id, ogs); v.SetFilterVisibility(f.Id, True)
 
-    for nombre_vista, parametro, colores, prefijo in (("VZ - SECTORES", "VZ_Sector", COLOR_SECTOR, "VZ Sector "),
-                                                       ("VZ - ESTADO", "VZ_Estado", COLOR_ESTADO, "VZ Estado ")):
+    for nombre_vista, parametro, colores, prefijo in (("VZ - SECTORES", "VZ_Sector", COLOR_SECTOR, "VZ Sector "),):
         try:   # si una vista falla, los parámetros y valores igual quedan
             v = vista_3d(nombre_vista)
             v.ViewTemplateId = ElementId.InvalidElementId
@@ -278,8 +243,7 @@ try:
             tabla.Name = NOMBRE_TABLA
         defn = tabla.Definition
         campos = ["VZ_Paquete", "VZ_Sector", "VZ_Actividad", "VZ_Partida", "VZ_Fecha_Prog", "VZ_Concreto_m3",
-                  "VZ_Encofrado_m2", "VZ_Acero_kg", "VZ_Monto_Contractual", "VZ_Fecha_Acero", "VZ_Fecha_Encofrado",
-                  "VZ_Fecha_Concreto", "VZ_Estado", "VZ_Valorizacion_N", "VZ_Monto_Valorizado"]
+                  "VZ_Encofrado_m2", "VZ_Acero_kg", "VZ_Monto_Contractual"]
         presentes = {defn.GetField(i).GetName(): defn.GetField(i) for i in range(defn.GetFieldCount())}
         disponibles = {sf.GetName(doc): sf for sf in defn.GetSchedulableFields()}
         for c in campos:
@@ -292,7 +256,7 @@ try:
         defn.AddFilter(ScheduleFilter(presentes["VZ_Actividad"].FieldId, ScheduleFilterType.HasValue))
         defn.IsItemized = True
         defn.ShowGrandTotal = True
-        for c in ("VZ_Concreto_m3", "VZ_Encofrado_m2", "VZ_Acero_kg", "VZ_Monto_Contractual", "VZ_Monto_Valorizado"):
+        for c in ("VZ_Concreto_m3", "VZ_Encofrado_m2", "VZ_Acero_kg", "VZ_Monto_Contractual"):
             try:
                 presentes[c].DisplayType = ScheduleFieldDisplayType.Totals
             except Exception:

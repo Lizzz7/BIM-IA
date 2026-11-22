@@ -2,7 +2,7 @@
 
 Edificio multifamiliar con 3 sótanos (modelo **REP0-MOD2-R02**), casco estructural. Arequipa.
 Archivos: `Cronograma_Valorizado_REP0-MOD2-R02.xlsx`, `nexo_no_datos.json` (también en `1_Panel\datos\`), `Sectorizacion\*.svg`.
-Generado con `4_Python\cronograma_nexo.py` a partir del modelo y del presupuesto `..._v2.xlsx`.
+Generado con `4_Python\cronograma_nexo.py` a partir del modelo y del presupuesto `..._v3.xlsx` (v3: metrados derivados sin redondeo intermedio).
 
 ## 1. Resumen
 | Dato | Valor |
@@ -11,7 +11,7 @@ Generado con `4_Python\cronograma_nexo.py` a partir del modelo y del presupuesto
 | Fin del casco | 11/11/2027 |
 | Plazo | 312 días calendario · 11 valorizaciones mensuales |
 | Calendario | **lunes a sábado**; domingo y feriados no laborables (incluye 15/08 Arequipa y 25/10 Construcción Civil) |
-| Costo directo programado | S/ 2,410,991.60 (cuadra con el presupuesto; diferencia S/ 0.23 por redondeo) |
+| Costo directo programado | S/ 2,410,991.98 (presupuesto v3: S/ 2,410,991.73; diferencia S/ 0.25 por redondear el monto de cada actividad) |
 | Personal promedio | 2 a 22 obreros/día (más subcontratos de excavación y anclajes) |
 
 ## 2. Estructura de desglose (EDT)

@@ -38,26 +38,25 @@ namespace NexoObraNO
         public static object Leer(UIApplication app, Config cfg)
         {
             var b = Base(cfg); var doc = Documento(app, b);
-            var faltan = new List<string>();
-            var muestra = doc.GetElement(new ElementId((long)b["elementos"][0]["id"]));
-            foreach (var p in Escritura.Nuevos.Select(n => n.nombre).Where(n => n != "VZ_Registro_Global").Concat(new[] { "VZ_Paquete" }))
-                if (muestra?.LookupParameter(p) == null) faltan.Add(p);
+            var reg = Escritura.Leer(cfg);                       // metrados ejecutados: archivo del panel, no el modelo
+            var E = reg["elementos"].AsObject();
             var els = new List<object>();
             foreach (var n in b["elementos"].AsArray())
             {
                 var e = doc.GetElement(new ElementId((long)n["id"]));
+                var r = E[((long)n["id"]).ToString(System.Globalization.CultureInfo.InvariantCulture)];
                 els.Add(new
                 {
                     id = (long)n["id"], existe = e != null, nivel = (string)n["nivel"], tipo = (string)n["tipo"], grupo = (string)n["grupo"],
                     paquete = (string)n["paquete"], sector = (string)n["sector"], actividad = (string)n["actividad"], fecha_prog = (string)n["fecha_prog"],
-                    partidas = n["partidas"], registro = Texto(e, "VZ_Registro") ?? "", obs = Texto(e, "VZ_Observaciones") ?? ""
+                    partidas = n["partidas"], registro = (string)r?["registro"] ?? "", obs = (string)r?["obs"] ?? ""
                 });
             }
             return new
             {
                 ok = true, modelo = (string)b["modelo"], inicio = (string)b["inicio_obra"], pie = b["pie"], niveles = b["niveles"],
                 capitulos = b["capitulos"], partidas = b["partidas"], elementos = els,
-                registroGlobal = Texto(doc.ProjectInformation, "VZ_Registro_Global") ?? "", parametrosFaltan = faltan
+                registroGlobal = (string)reg["global"] ?? "", parametrosFaltan = new string[0], archivoRegistros = Escritura.Ruta(cfg)
             };
         }
 

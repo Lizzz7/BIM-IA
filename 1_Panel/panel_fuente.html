@@ -68,6 +68,14 @@ td input{width:78px;height:26px;text-align:right}
 .seg button{border:0;background:none;padding:0 12px;height:28px;color:var(--tx2);cursor:pointer;font-size:12px}
 .seg button.on{background:var(--gold);color:#1a1405;font-weight:600}
 .chart svg{width:100%;height:auto;display:block}
+.salud{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.ind{border:1px solid var(--bd);border-radius:9px;padding:10px 12px;background:var(--elev);border-left:4px solid var(--mut)}
+.ind.ok{border-left-color:var(--ok)} .ind.warn{border-left-color:var(--warn)} .ind.bad{border-left-color:var(--bad)}
+.ind small{display:block;color:var(--tx2);font-size:11.5px} .ind b{display:block;font-size:19px;margin:2px 0} .ind span{font-size:11px;color:var(--mut)}
+.semaforo{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--bd2)}
+.semaforo i{width:9px;height:9px;border-radius:50%} .semaforo.ok i{background:var(--ok)} .semaforo.warn i{background:var(--warn)} .semaforo.bad i{background:var(--bad)}
+@media (max-width:1200px){.salud{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:700px){.salud{grid-template-columns:1fr}}
 .capbar{display:grid;grid-template-columns:150px 1fr 90px;gap:8px;align-items:center;font-size:12px;margin:6px 0}
 .capbar .bars{display:grid;gap:3px}
 /* visor */
@@ -158,12 +166,13 @@ dialog{background:var(--surf);color:var(--tx);border:1px solid var(--bd2);border
     <div class="estado" id="estado"><i></i><span>Conectando con Revit…</span></div>
     <div class="sp"></div>
     <label class="campo">Fecha de corte <input type="date" class="inp" id="corte"></label>
-    <button class="btn" id="recargar" title="Volver a leer los parámetros VZ_ del modelo">↻</button>
+    <button class="btn" id="recargar" title="Volver a leer el modelo y los metrados registrados">↻</button>
   </header>
   <main id="main">
     <!-- 1 INICIO -->
     <section class="pag" id="pag-inicio">
       <div class="kpis" id="kpis"></div>
+      <div class="card" style="margin-top:14px"><div class="fila" style="margin:0 0 10px;justify-content:space-between"><h3 style="margin:0">Salud de la obra</h3><span id="saludGlobal"></span></div><div id="salud" class="salud"></div></div>
       <div class="grid" style="grid-template-columns:1.4fr 1fr;margin-top:14px">
         <div class="card"><h3>Curva S · programado vs valorizado (costo directo acumulado)</h3><div class="chart" id="curvaInicio"></div></div>
         <div class="card"><h3>Avance por capítulo</h3><div id="capitulos"></div></div>
@@ -228,7 +237,7 @@ dialog{background:var(--surf);color:var(--tx);border:1px solid var(--bd2);border
         <div class="card"><div class="fila" style="margin:0 0 10px"><h3 style="margin:0;flex:1">Valorizaciones creadas</h3><button class="btn pri" id="crearVz">＋ Crear valorización</button></div><div id="listaVz"></div></div>
         <div class="card"><div class="fila" style="margin:0 0 10px"><h3 style="margin:0;flex:1">Control de valorizaciones (en vivo)</h3>
           <label class="campo">Valorización <select class="inp" id="mes"></select></label>
-          <button class="btn pri" id="verFormato">Formato</button><button class="btn" id="verMetrados">Hoja de metrados</button><button class="btn" id="verExpediente">Expediente PDF</button><button class="btn" id="csv">⇩ CSV</button></div>
+          <button class="btn pri" id="verFormato">Formato</button><button class="btn" id="verMetrados">Hoja de metrados</button><button class="btn" id="verExpediente">Expediente PDF</button><button class="btn" id="excelMes">⇩ Excel</button><button class="btn" id="csv">⇩ CSV</button></div>
           <div id="tablaVal"></div></div>
         <div class="grid" style="grid-template-columns:1fr 1fr">
           <div class="card"><h3>Curva S mensual</h3><div class="chart" id="curvaVal"></div></div>
@@ -263,6 +272,7 @@ dialog{background:var(--surf);color:var(--tx);border:1px solid var(--bd2);border
   </main>
 </div>
 <div id="toast"></div>
+<!--__EXCELJS__-->
 <dialog id="dlg"><div id="dlgCuerpo"></div><div class="fila" style="justify-content:flex-end;margin-top:14px" id="dlgBotones"></div></dialog>
 <div class="formato" id="formato" hidden><div class="f-bar"><b id="fTitulo">Formato de valorización</b><span class="sp"></span>
   <span id="fCampos"><label class="campo">Amort. adelanto directo % <input class="inp" id="fAdel" type="number" step="any" min="0" style="width:80px"></label>
@@ -314,7 +324,8 @@ function sumar(regs, hasta){ const s = {}; regs.forEach(r => { if(!hasta || r.f 
 function todos(){ const out = []; S.els.forEach(e => e.regs.forEach(r => out.push({...r, id:e.id, el:e}))); S.globalRegs.forEach(r => out.push({...r, id:0})); return out; }
 const pu = it => S.porItem[it]?.pu || 0;
 function evEntre(desde, hasta){ return todos().reduce((s,r) => s + (r.f >= desde && r.f <= hasta ? r.q * pu(r.it) : 0), 0); }
-const BAC = () => S.partidas.reduce((s,p) => s + p.metrado * p.pu, 0);
+const r2 = x => Math.round((x + Math.sign(x) * 1e-9) * 100) / 100;          // redondeo a 2 decimales (convención S10)
+const BAC = () => r2(S.partidas.reduce((s,p) => s + r2(p.metrado * p.pu), 0));  // = costo directo del presupuesto
 function principal(e){ return e.partidas.find(x => x.clase === "concreto" || x.clase === "muro"); }
 function estadoReal(e, hasta){ const ej = hasta ? sumar(e.regs, hasta) : e.ejec, p = principal(e);
   if(p && (ej[p.item]||0) >= p.metrado*0.999) return 2; return Object.values(ej).some(q => q > 1e-9) ? 1 : 0; }
@@ -340,7 +351,7 @@ async function cargarDatos(){
   $("#crumbObra").textContent = (ls("empresa")?.obra) || ("NEXO OBRA (NO) · " + d.modelo);
   const faltan = d.parametrosFaltan || [];
   if(SNAP) estado("ro", `Solo lectura · datos al ${fmtD(SNAP.fecha)} · deja tus sugerencias en los comentarios de la página`);
-  else estado(LECTURA ? "ro" : "ok", `Revit: ${d.modelo} · ${S.els.length} elementos` + (LECTURA ? " · solo lectura" : "") + (faltan.length ? ` · ${faltan.length} parámetros se crearán al registrar` : ""));
+  else estado(LECTURA ? "ro" : "ok", `Revit: ${d.modelo} · ${S.els.length} elementos` + (LECTURA ? " · solo lectura" : "") + " · metrados guardados en el panel");
   pintar();
 }
 
@@ -379,12 +390,55 @@ function barrasMes(cont){
     `</svg><div class="leyenda" style="margin-top:6px"><span><i style="background:#E5B869"></i>Programado del mes</span><span><i style="background:#3B82F6"></i>Valorizado del mes</span></div>`;
 }
 
+/* ============================================================ SALUD DE LA OBRA
+   Solo con datos existentes: programado (cronograma) y valorizado (metrados registrados × P.U.). No hay costo real
+   registrado, así que no se calcula el índice de costo (CPI). Criterio del semáforo: SPI ≥ 0.95 bien, ≥ 0.85 atención, menor crítico. */
+const UMBRAL = {bien:0.95, atencion:0.85};
+let PV_DIA = null;
+function pvDia(){ if(!PV_DIA) PV_DIA = DIAS_OBRA.map(d => pvA(d)); return PV_DIA; }
+function diaLabSiguiente(desde, n){ const d = dISO(desde); while(n > 0){ d.setDate(d.getDate()+1); if(laborable(isoD(d))) n--; } return isoD(d); }
+function salud(c){
+  if(!CRONO || !S.datos) return null;
+  const pv = pvDia(), ev = evEntre("0000", c), pvc = pvA(c), bac = BAC();
+  const AT = lab(CRONO.inicio, c);                      // días laborables transcurridos al corte
+  let ES = 0;                                           // cronograma ganado: día en que el programa alcanzaba lo valorizado
+  if(ev > 0){ let k = pv.findIndex(x => x >= ev); if(k === -1) ES = pv.length; else if(k === 0) ES = ev / pv[0]; else ES = k + (ev - pv[k-1]) / Math.max(1e-9, pv[k] - pv[k-1]); }
+  const spi = pvc > 0 ? ev / pvc : null, spit = AT > 0 ? ES / AT : null;
+  const finProy = spit && spit > 0 ? diaLabSiguiente(CRONO.inicio, Math.max(0, Math.ceil(DIAS_OBRA.length / spit) - 1)) : null;
+  const atr = S.els.filter(e => atrasado(e, c));
+  const montoAtr = atr.reduce((s,e) => { const ej = sumar(e.regs, c); return s + e.partidas.reduce((t,p) => t + Math.max(0, p.metrado - (ej[p.item]||0)) * pu(p.item), 0); }, 0);
+  const actsAtr = CRONO.actividades.filter(a => a.fin < c && a.tipo !== "GLO").map(a => ({a, av:avanceAct(a, c)})).filter(x => x.av != null && x.av < 0.99);
+  const hace30 = isoD(new Date(dISO(c).getTime() - 29*864e5)), ev30 = evEntre(hace30, c), pv30 = pvc - pvA(isoD(new Date(dISO(hace30).getTime() - 864e5)));
+  return {ev, pvc, bac, spi, sv:ev - pvc, ES, AT, spit, atrasoDias:AT - ES, finProg:DIAS_OBRA.at(-1), finProy, atr, montoAtr, actsAtr, ev30, pv30,
+          ritmo:pv30 > 0 ? ev30 / pv30 : null, mayores:S.els.filter(e => e.obs).length, avFis:bac ? ev/bac : 0, avProg:bac ? pvc/bac : 0};
+}
+const nivel = x => x == null ? "" : x >= UMBRAL.bien ? "ok" : x >= UMBRAL.atencion ? "warn" : "bad";
+function pSalud(box, c){
+  const h = salud(c); if(!h){ box.innerHTML = ""; return; }
+  if(c < CRONO.inicio){ box.innerHTML = `<div class="nota" style="grid-column:1/-1">La fecha de corte (${fmtD(c)}) es anterior al inicio de obra (${fmtD(CRONO.inicio)}).</div>`; $("#saludGlobal").innerHTML = ""; return; }
+  const g = nivel(h.spit ?? h.spi), txt = {ok:"Obra a tiempo", warn:"Obra con atraso leve", bad:"Obra con atraso crítico"}[g] || "Sin datos";
+  $("#saludGlobal").innerHTML = `<span class="semaforo ${g}"><i></i>${txt} · al ${fmtD(c)}</span>`;
+  const ind = (cls, t, v, s) => `<div class="ind ${cls}"><small>${t}</small><b>${v}</b><span>${s}</span></div>`;
+  const dDias = h.atrasoDias;
+  box.innerHTML =
+    ind(nivel(h.spi), "SPI · valorizado / programado", h.spi == null ? "-" : nf(h.spi,2), `S/ ${nf(h.ev,0)} de S/ ${nf(h.pvc,0)} programados`) +
+    ind(nivel(h.spit), "Atraso en días (cronograma ganado)", dDias > 0.5 ? `${nf(dDias,1)} días` : "Al día", `Lo valorizado equivale al día ${nf(h.ES,1)} del programa; vamos en el día ${h.AT}`) +
+    ind(h.finProy && h.finProy > h.finProg ? (nivel(h.spit) || "warn") : "ok", "Fin proyectado del casco", h.finProy ? fmtD(h.finProy) : "-", `Programado: ${fmtD(h.finProg)} · al ritmo actual (SPI(t) ${h.spit == null ? "-" : nf(h.spit,2)})`) +
+    ind(h.sv >= 0 ? "ok" : nivel(h.spi), "Variación del cronograma (SV)", `S/ ${nf(h.sv,0)}`, h.sv >= 0 ? "adelantado respecto al programa" : "valorizado por debajo de lo programado") +
+    ind(nivel(h.ritmo), "Ritmo de los últimos 30 días", h.ritmo == null ? "-" : nf(h.ritmo*100,0) + "%", `S/ ${nf(h.ev30,0)} valorizados de S/ ${nf(h.pv30,0)} programados`) +
+    ind(h.atr.length ? "bad" : "ok", "Elementos atrasados", String(h.atr.length), h.atr.length ? `S/ ${nf(h.montoAtr,0)} pendientes de ejecutar` : "ningún vaciado vencido") +
+    ind(h.actsAtr.length ? "warn" : "ok", "Actividades vencidas sin terminar", String(h.actsAtr.length), h.actsAtr.slice(0,2).map(x => `${x.a.id} (${nf(x.av*100,0)}%)`).join(" · ") || "todas al día") +
+    ind(h.mayores ? "warn" : "ok", "Mayores metrados", String(h.mayores), h.mayores ? "revisar en Control" : "sin excesos sobre el contrato");
+  box.innerHTML += `<div class="nota" style="grid-column:1/-1">Programado: cronograma (lunes a sábado). Valorizado: metrados registrados × P.U. Semáforo: SPI ≥ ${UMBRAL.bien} a tiempo, ≥ ${UMBRAL.atencion} atención, menor crítico. Índice de costo (CPI): requiere registrar el costo real, que aún no se lleva en el panel.</div>`;
+}
+
 /* ============================================================ 1 INICIO */
 function pInicio(){
+  pSalud($("#salud"), corte());
   const c = corte(), bac = BAC(), pie = S.datos.pie, ev = evEntre("0000", c), pv = pvA(c), spi = pv > 0 ? ev / pv : null;
   const iC = IDX[c] ?? (c < (DIAS_OBRA[0]||"") ? -1 : DIAS_OBRA.length - 1), finObra = DIAS_OBRA.at(-1);
   $("#kpis").innerHTML = `
-    <div class="kpi"><small>Presupuesto (con IGV)</small><b>S/ ${nf(bac*(1+(pie.gg||0)+(pie.ut||0))*(1+(pie.igv||0)),0)}</b><span>Costo directo S/ ${nf(bac,0)}</span></div>
+    <div class="kpi"><small>Presupuesto (con IGV)</small><b>S/ ${nf((s => r2(s + r2(s*(pie.igv||0))))(r2(bac + r2(bac*(pie.gg||0)) + r2(bac*(pie.ut||0)))),0)}</b><span>Costo directo S/ ${nf(bac,0)}</span></div>
     <div class="kpi"><small>Valorizado acumulado (CD)</small><b>${nf(bac?ev/bac*100:0,1)}%</b><span>S/ ${nf(ev,0)}</span></div>
     <div class="kpi"><small>Programado al corte (CD)</small><b>${nf(bac?pv/bac*100:0,1)}%</b><span>S/ ${nf(pv,0)}</span></div>
     <div class="kpi ${spi==null?"":spi>=1?"ok":spi>=0.9?"warn":"bad"}"><small>SPI (valorizado / programado)</small><b>${spi==null?"-":nf(spi,2)}</b><span>${spi==null?"aún no hay programado":spi>=1?"a tiempo o adelantado":"atrasado"}</span></div>
@@ -502,7 +556,7 @@ async function porPartida(p, els){
   let pesos = els.map(e => Math.max(0, saldo(e, p.item))), tot = pesos.reduce((a,b) => a+b, 0);
   if(tot <= 1e-9){ pesos = els.map(e => e.partidas.find(x => x.item === p.item).metrado); tot = pesos.reduce((a,b) => a+b, 0); }
   const regs = els.map((e,i) => ({id:e.id, item:p.item, cantidad:+(Q*pesos[i]/tot).toFixed(6)})).filter(r => r.cantidad);
-  const ok = await dialogo(`<h2>¿Está seguro de colocar por la partida completa?</h2><p>Se registrarán <b>${nf(Q,3)} ${esc(p.und)}</b> de <b>${esc(p.item)} ${esc(p.desc)}</b> con fecha ${fmtD(fechaParte())}, repartidos entre <b>${regs.length}</b> elementos según su saldo${$("#nivel").value ? " (solo los del nivel elegido)" : ""}.</p><p class="nota">Se escribe en Revit (parámetros VZ_) y se suma a lo ya ejecutado.</p>`,
+  const ok = await dialogo(`<h2>¿Está seguro de colocar por la partida completa?</h2><p>Se registrarán <b>${nf(Q,3)} ${esc(p.und)}</b> de <b>${esc(p.item)} ${esc(p.desc)}</b> con fecha ${fmtD(fechaParte())}, repartidos entre <b>${regs.length}</b> elementos según su saldo${$("#nivel").value ? " (solo los del nivel elegido)" : ""}.</p><p class="nota">Se guarda en el panel (no en el modelo de Revit) y se suma a lo ya ejecutado.</p>`,
     [["Cancelar", false], ["Sí, registrar", true, "pri"]]);
   if(ok) registrar(regs);
 }
@@ -530,10 +584,10 @@ async function registrar(registros){
     const r = await api("/api/metrado", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({fecha, simular:false, registros})});
     r.elementos.forEach(x => { const e = S.porId[x.id]; if(e){ e.registro = x.registro; e.obs = x.obs; e.regs = parsear(x.registro); e.ejec = sumar(e.regs); } });
     S.globalRegs = parsear(r.registroGlobal); S.global = sumar(S.globalRegs); pintar();
-    if(r.alertas.length) alert("ALERTA DE MAYOR METRADO\n\n" + r.alertas.join("\n") + "\n\nQuedó anotado en VZ_Observaciones del elemento.");
+    if(r.alertas.length) alert("ALERTA DE MAYOR METRADO\n\n" + r.alertas.join("\n") + "\n\nQuedó anotado en las observaciones del elemento en el panel.");
     if(r.rechazados.length) alert("No se registraron:\n" + r.rechazados.map(x => `${x.id||"Partida"} ${x.item}: ${x.motivo}`).join("\n"));
-    toast(`Registrado en Revit: ${r.aplicados.length} valores` + (r.notas.length ? " · " + r.notas.length + " parámetros creados" : ""));
-  }catch(err){ alert("No se pudo registrar en Revit:\n" + err.message); }
+    toast(`Metrado guardado en el panel: ${r.aplicados.length} valores`);
+  }catch(err){ alert("No se pudo guardar el metrado:\n" + err.message); }
 }
 
 /* ============================================================ 4 PARTE DIARIO */
@@ -612,8 +666,9 @@ function datosVal(n){
 
 /* ---------- valorizaciones creadas: se guardan con sus datos (cabecera, deducciones, metrados) y se pueden editar */
 const VZ = () => ls("valorizaciones") || [];
-function totalVz(v){ const pie = S.datos.pie, cd = Object.entries(v.act).reduce((s,[it,q]) => s + q*pu(it), 0), sub = cd*(1+(pie.gg||0)+(pie.ut||0)), bruta = sub*(1+(pie.igv||0));
-  return {cd, bruta, neto: bruta*(1 - (parseFloat(v.ded.adel)||0)/100 - (parseFloat(v.ded.ret)||0)/100) - (parseFloat(v.ded.mat)||0)}; }
+function totalVz(v){ const pie = S.datos.pie, cd = r2(Object.entries(v.act).reduce((s,[it,q]) => s + r2(r2(q)*pu(it)), 0));
+  const sub = r2(cd + r2(cd*(pie.gg||0)) + r2(cd*(pie.ut||0))), bruta = r2(sub + r2(sub*(pie.igv||0)));
+  return {cd, bruta, neto: r2(bruta - r2(bruta*(parseFloat(v.ded.adel)||0)/100) - r2(bruta*(parseFloat(v.ded.ret)||0)/100) - (parseFloat(v.ded.mat)||0))}; }
 async function formVz(existente){
   const per = periodos(), creadas = VZ(), emp = ls("empresa") || {}, c = ls("formato") || {};
   const n = existente ? existente.n : (S.valN || per[0].n), p = per.find(x => x.n == n) || per[0];
@@ -656,6 +711,7 @@ function listaVz(){
     l.map(v => { const t = totalVz(v); return `<tr><td>${String(v.n).padStart(2,"0")}</td><td>${fmtD(v.desde)} – ${fmtD(v.hasta)}</td><td>${fmtD(v.emision)}</td><td class="n">${nf(t.cd)}</td><td class="n">${nf(t.bruta)}</td><td class="n"><b>${nf(t.neto)}</b></td>
       <td>${LECTURA ? esc(v.estado) : `<select class="inp" data-vzest="${v.n}" style="height:26px">${["Borrador","Presentada","Aprobada","Pagada"].map(x => `<option ${v.estado===x?"selected":""}>${x}</option>`).join("")}</select>`}</td>
       <td style="white-space:nowrap"><button class="btn sm" data-vz="${v.n}" data-q="expediente">Expediente</button> <button class="btn sm" data-vz="${v.n}" data-q="formato">Formato</button> <button class="btn sm" data-vz="${v.n}" data-q="metrados">Metrados</button>
+      ${SNAP ? "" : `<button class="btn sm pri" data-vzx="${v.n}">⇩ Excel</button>`}
       ${LECTURA ? "" : `<button class="btn sm" data-vzed="${v.n}">Editar</button> <button class="btn sm" data-vzdel="${v.n}">Eliminar</button>`}</td></tr>`; }).join("") + `</tbody></table>
     <div class="nota">Cada valorización guarda sus metrados del periodo al momento de crearla; si luego registras correcciones, edítala y marca «volver a tomar los metrados».</div>`;
 }
@@ -669,16 +725,17 @@ function pValorizaciones(){
       const futuro = p.desde > c, evm = futuro ? 0 : evEntre(p.desde, p.hasta); acum += evm;
       return `<tr class="cl ${p.n==S.valN?"sel":""}" data-n="${p.n}"><td>${String(p.n).padStart(2,"0")}</td><td>${mesTxt(p.desde)}</td><td class="n">${nf(pvm)}</td><td class="n">${futuro?"-":nf(evm)}</td><td class="n">${futuro?"-":nf(acum)}</td><td class="n">${futuro?"-":nf(bac?acum/bac*100:0,2)+"%"}</td><td class="n">${nf(pva)}</td><td class="n">${futuro||!pva?"-":nf(acum/pva,2)}</td>
         <td>${LECTURA ? esc(est[p.n]||"Borrador") : `<select class="inp" data-est="${p.n}" style="height:26px">${["Borrador","Presentada","Aprobada","Pagada"].map(x => `<option ${ (est[p.n]||"Borrador")===x?"selected":""}>${x}</option>`).join("")}</select>`}</td></tr>`; }).join("") +
-    `</tbody></table><div class="nota">Programado: cronograma. Valorizado: metrados diarios registrados en Revit × P.U. del presupuesto (costo directo). El estado lo marcas tú y se guarda en este navegador.</div>`;
+    `</tbody></table><div class="nota">Programado: cronograma. Valorizado: metrados diarios registrados en el panel × P.U. del presupuesto (costo directo). El estado lo marcas tú y se guarda en este navegador.</div>`;
   $("#tablaVal").querySelectorAll("tr[data-n]").forEach(tr => tr.onclick = ev => { if(ev.target.tagName === "SELECT") return; S.valN = +tr.dataset.n; pValorizaciones(); });
   $("#tablaVal").querySelectorAll("select[data-est]").forEach(s => s.onchange = () => { const e = ls("estados") || {}; e[s.dataset.est] = s.value; ls("estados", e); });
   curvaS($("#curvaVal")); barrasMes($("#barrasVal"));
   $("#listaVz").innerHTML = listaVz(); $("#crearVz").hidden = LECTURA;
   $("#listaVz").querySelectorAll("[data-vz]").forEach(b => b.onclick = () => verVz(+b.dataset.vz, b.dataset.q));
   $("#listaVz").querySelectorAll("[data-vzed]").forEach(b => b.onclick = () => formVz(VZ().find(x => x.n == b.dataset.vzed)));
+  $("#listaVz").querySelectorAll("[data-vzx]").forEach(b => b.onclick = () => excelValorizacion(VZ().find(x => x.n == b.dataset.vzx)).catch(e => alert("No se pudo generar el Excel: " + e.message)));
   $("#listaVz").querySelectorAll("[data-vzest]").forEach(s => s.onchange = () => { const l = VZ(), v = l.find(x => x.n == s.dataset.vzest); v.estado = s.value; ls("valorizaciones", l); if(window.NUBE?.guardarVz) NUBE.guardarVz(v).catch(() => {}); });
   $("#listaVz").querySelectorAll("[data-vzdel]").forEach(b => b.onclick = async () => { const n = +b.dataset.vzdel;
-    if(!await dialogo(`<h2 style="margin-top:0">¿Eliminar la valorización N° ${String(n).padStart(2,"0")}?</h2><p>Se borra el documento guardado (cabecera, deducciones y metrados congelados). Los metrados registrados en Revit no se tocan.</p>`, [["Cancelar", false], ["Eliminar", true, "pri"]])) return;
+    if(!await dialogo(`<h2 style="margin-top:0">¿Eliminar la valorización N° ${String(n).padStart(2,"0")}?</h2><p>Se borra el documento guardado (cabecera, deducciones y metrados congelados). Los metrados diarios registrados no se tocan.</p>`, [["Cancelar", false], ["Eliminar", true, "pri"]])) return;
     ls("valorizaciones", VZ().filter(x => x.n != n)); if(window.NUBE?.borrarVz) NUBE.borrarVz(n).catch(() => {}); pValorizaciones(); });
 }
 $("#mes").addEventListener("change", () => { S.valN = +$("#mes").value; pValorizaciones(); });
@@ -694,33 +751,37 @@ function formatoHTML(n){
   const {p, ant, act} = datosVal(n), pie = S.datos.pie, gg = pie.gg||0, ut = pie.ut||0, igv = pie.igv||0, c = S.vz ? S.vz.ded : (ls("formato") || {});
   const adel = (parseFloat(c.adel)||0)/100, mat = parseFloat(c.mat)||0, ret = (parseFloat(c.ret)||0)/100;
   const filas = [...Object.entries(S.datos.capitulos).map(([it, d]) => ({it, d, cap:true})), ...S.partidas.map(x => ({it:x.item, x}))].sort((a,b) => a.it.localeCompare(b.it, "es", {numeric:true}));
-  const tot = it => { const t = {pre:0, ant:0, act:0}; S.partidas.forEach(x => { if(x.item.startsWith(it + ".")){ t.pre += x.metrado*x.pu; t.ant += (ant[x.item]||0)*x.pu; t.act += (act[x.item]||0)*x.pu; } }); return t; };
+  /* Regla S10: metrados a 2 decimales, monto = ROUND(metrado x P.U.; 2), acumulado = anterior + del mes; indirectos redondeados a 2 */
+  const linP = x => { const a = r2(ant[x.item]||0), m = r2(act[x.item]||0), aS = r2(a*x.pu), mS = r2(m*x.pu); return {a, m, ac:r2(a+m), aS, mS, acS:r2(aS+mS), pre:r2(x.metrado*x.pu)}; };
+  const tot = it => { const t = {pre:0, ant:0, act:0}; S.partidas.forEach(x => { if(x.item.startsWith(it + ".")){ const l = linP(x); t.pre += l.pre; t.ant += l.aS; t.act += l.mS; } }); return t; };
   let cuerpo = "", T = {pre:0, ant:0, act:0};
   filas.forEach(f => {
     if(f.cap){ const t = tot(f.it); if(!t.pre) return; const ac = t.ant + t.act;
       cuerpo += `<tr class="t"><td>${f.it}</td><td>${esc(f.d)}</td><td></td><td></td><td></td><td class="n">${nf(t.pre)}</td><td></td><td class="n">${nf(t.ant)}</td><td></td><td class="n">${nf(t.act)}</td><td></td><td class="n">${nf(ac)}</td><td class="n">${nf(t.pre?ac/t.pre*100:0,2)}%</td><td></td><td class="n">${nf(t.pre-ac)}</td></tr>`; return; }
-    const x = f.x, a = ant[x.item]||0, m = act[x.item]||0, ac = a + m, pre = x.metrado*x.pu; T.pre += pre; T.ant += a*x.pu; T.act += m*x.pu;
-    cuerpo += `<tr><td>${x.item}</td><td>${esc(x.desc)}${ac > x.metrado + 1e-6 ? ' <b style="color:#b91c1c">(mayor metrado)</b>' : ""}</td><td>${esc(x.und)}</td><td class="n">${nf(x.metrado)}</td><td class="n">${nf(x.pu)}</td><td class="n">${nf(pre)}</td>
-      <td class="n">${nf(a)}</td><td class="n">${nf(a*x.pu)}</td><td class="n">${nf(m)}</td><td class="n">${nf(m*x.pu)}</td><td class="n">${nf(ac)}</td><td class="n">${nf(ac*x.pu)}</td><td class="n">${nf(x.metrado?ac/x.metrado*100:0,2)}%</td><td class="n">${nf(x.metrado-ac)}</td><td class="n">${nf(pre-ac*x.pu)}</td></tr>`; });
-  const T_ac = T.ant + T.act, linea = (lbl, f, cls="tot") => `<tr class="${cls}"><td></td><td>${lbl}</td><td colspan="3"></td><td class="n">${nf(f(T.pre))}</td><td></td><td class="n">${nf(f(T.ant))}</td><td></td><td class="n">${nf(f(T.act))}</td><td></td><td class="n">${nf(f(T_ac))}</td><td class="n">${nf(T.pre?f(T_ac)/f(T.pre)*100:0,2)}%</td><td></td><td class="n">${nf(f(T.pre)-f(T_ac))}</td></tr>`;
-  const sub = v => v*(1+gg+ut), tot1 = v => sub(v)*(1+igv), bruta = tot1(T.act), aAdel = bruta*adel, aRet = bruta*ret, neto = bruta - aAdel - mat - aRet;
+    const x = f.x, l = linP(x); T.pre += l.pre; T.ant += l.aS; T.act += l.mS;
+    cuerpo += `<tr><td>${x.item}</td><td>${esc(x.desc)}${l.ac > x.metrado + 1e-6 ? ' <b style="color:#b91c1c">(mayor metrado)</b>' : ""}</td><td>${esc(x.und)}</td><td class="n">${nf(x.metrado)}</td><td class="n">${nf(x.pu)}</td><td class="n">${nf(l.pre)}</td>
+      <td class="n">${nf(l.a)}</td><td class="n">${nf(l.aS)}</td><td class="n">${nf(l.m)}</td><td class="n">${nf(l.mS)}</td><td class="n">${nf(l.ac)}</td><td class="n">${nf(l.acS)}</td><td class="n">${nf(x.metrado?l.ac/x.metrado*100:0,2)}%</td><td class="n">${nf(r2(x.metrado-l.ac))}</td><td class="n">${nf(r2(l.pre-l.acS))}</td></tr>`; });
+  T.pre = r2(T.pre); T.ant = r2(T.ant); T.act = r2(T.act);
+  const T_ac = r2(T.ant + T.act), linea = (lbl, f, cls="tot") => `<tr class="${cls}"><td></td><td>${lbl}</td><td colspan="3"></td><td class="n">${nf(f(T.pre))}</td><td></td><td class="n">${nf(f(T.ant))}</td><td></td><td class="n">${nf(f(T.act))}</td><td></td><td class="n">${nf(f(T_ac))}</td><td class="n">${nf(T.pre?f(T_ac)/f(T.pre)*100:0,2)}%</td><td></td><td class="n">${nf(r2(f(T.pre)-f(T_ac)))}</td></tr>`;
+  const sub = v => r2(v + r2(v*gg) + r2(v*ut)), tot1 = v => r2(sub(v) + r2(sub(v)*igv)), bruta = tot1(T.act), aAdel = r2(bruta*adel), aRet = r2(bruta*ret), neto = r2(bruta - aAdel - mat - aRet);
   const per = CRONO?.periodos.find(x => x.n === p.n), pvAc = per ? per.pv_acum : pvA(p.hasta), pvMes = per ? per.pv_mes : null;
   return `<div class="hoja">${cabecera("VALORIZACIÓN DE OBRA N° " + String(p.n).padStart(2,"0"), `Periodo del ${fmtD(p.desde)} al ${fmtD(p.hasta)} · soles, precios sin IGV · presupuesto ${CRONO?.fuentePresupuesto || "S10"}`)}
     <table><thead><tr><th rowspan="2">Ítem</th><th rowspan="2">Descripción</th><th rowspan="2">Und.</th><th colspan="3">Presupuesto contratado</th><th colspan="2">Anterior</th><th colspan="2">Del mes</th><th colspan="3">Acumulado</th><th colspan="2">Saldo</th></tr>
       <tr><th>Metrado</th><th>P.U. S/</th><th>Parcial S/</th><th>Metrado</th><th>S/</th><th>Metrado</th><th>S/</th><th>Metrado</th><th>S/</th><th>%</th><th>Metrado</th><th>S/</th></tr></thead>
-    <tbody>${cuerpo}${linea("COSTO DIRECTO", v => v)}${linea(`GASTOS GENERALES (${nf(gg*100,2)}% del CD)`, v => v*gg, "")}${linea(`UTILIDAD (${nf(ut*100,2)}% del CD)`, v => v*ut, "")}
-      ${linea("SUBTOTAL", sub)}${linea(`IGV (${nf(igv*100,2)}%)`, v => sub(v)*igv, "")}${linea("TOTAL VALORIZADO", tot1)}</tbody></table>
+    <tbody>${cuerpo}${linea("COSTO DIRECTO", v => v)}${linea(`GASTOS GENERALES (${nf(gg*100,2)}% del CD)`, v => r2(v*gg), "")}${linea(`UTILIDAD (${nf(ut*100,2)}% del CD)`, v => r2(v*ut), "")}
+      ${linea("SUBTOTAL", sub)}${linea(`IGV (${nf(igv*100,2)}%)`, v => r2(sub(v)*igv), "")}${linea("TOTAL VALORIZADO", tot1)}</tbody></table>
     <div class="res"><div>Avance económico del mes<b>${nf(T.pre?T.act/T.pre*100:0,2)}%</b>del costo directo contratado</div><div>Avance económico acumulado<b>${nf(T.pre?T_ac/T.pre*100:0,2)}%</b>S/ ${nf(T_ac)} de ${nf(T.pre)}</div>
       <div>Programado acumulado al ${fmtD(p.hasta)}<b>${nf(T.pre?pvAc/T.pre*100:0,2)}%</b>S/ ${nf(pvAc)}${pvMes!=null?` · del mes S/ ${nf(pvMes)}`:""}</div>
       <div>SPI acumulado<b>${pvAc ? nf(T_ac/pvAc,3) : "-"}</b>${pvAc ? (T_ac >= pvAc ? "a tiempo o adelantado" : "atrasado respecto al programa") : "sin programado"}</div></div>
     <table style="max-width:640px;margin-left:auto"><tbody>
-      <tr><td>Costo directo del mes</td><td class="n">${nf(T.act)}</td><td class="n">100.00%</td></tr><tr><td>Gastos generales (costo indirecto)</td><td class="n">${nf(T.act*gg)}</td><td class="n">${nf(gg*100,2)}%</td></tr>
-      <tr><td>Utilidad (costo indirecto)</td><td class="n">${nf(T.act*ut)}</td><td class="n">${nf(ut*100,2)}%</td></tr><tr class="tot"><td>Subtotal</td><td class="n">${nf(sub(T.act))}</td><td class="n">${nf((1+gg+ut)*100,2)}%</td></tr>
-      <tr><td>IGV</td><td class="n">${nf(sub(T.act)*igv)}</td><td class="n">${nf(igv*100,2)}% del subtotal</td></tr><tr class="tot"><td>Valorización bruta del mes</td><td class="n">${nf(bruta)}</td><td></td></tr>
+      <tr><td>Costo directo del mes</td><td class="n">${nf(T.act)}</td><td class="n">100.00%</td></tr><tr><td>Gastos generales (costo indirecto)</td><td class="n">${nf(r2(T.act*gg))}</td><td class="n">${nf(gg*100,2)}%</td></tr>
+      <tr><td>Utilidad (costo indirecto)</td><td class="n">${nf(r2(T.act*ut))}</td><td class="n">${nf(ut*100,2)}%</td></tr><tr class="tot"><td>Subtotal</td><td class="n">${nf(sub(T.act))}</td><td class="n">${nf((1+gg+ut)*100,2)}%</td></tr>
+      <tr><td>IGV</td><td class="n">${nf(r2(sub(T.act)*igv))}</td><td class="n">${nf(igv*100,2)}% del subtotal</td></tr><tr class="tot"><td>Valorización bruta del mes</td><td class="n">${nf(bruta)}</td><td></td></tr>
       <tr><td>(-) Amortización de adelanto directo</td><td class="n">${nf(-aAdel)}</td><td class="n">${nf(adel*100,2)}%</td></tr><tr><td>(-) Amortización de adelanto de materiales</td><td class="n">${nf(-mat)}</td><td></td></tr>
       <tr><td>(-) Retención por fondo de garantía</td><td class="n">${nf(-aRet)}</td><td class="n">${nf(ret*100,2)}%</td></tr><tr class="neto"><td>NETO A PAGAR</td><td class="n">${nf(neto)}</td><td></td></tr></tbody></table>
     <div class="nota2">Gastos generales, utilidad e IGV: presupuesto S10 v2. Amortizaciones y retención: las escribe el usuario. Programado: cronograma (lunes a sábado). «Mayor metrado»: acumulado mayor al contrato.</div>${firmas()}</div>`;
 }
+/*__EXCEL__*/
 function metradosHTML(n){
   const {p, det} = datosVal(n), g = {}; det.forEach(r => (g[r.it] ||= []).push(r));
   return `<div class="hoja">${cabecera("HOJA DE METRADOS EJECUTADOS · VALORIZACIÓN N° " + String(p.n).padStart(2,"0"), `Del ${fmtD(p.desde)} al ${fmtD(p.hasta)} · sustento por elemento del modelo (ElementId de Revit)`)}` +
@@ -737,10 +798,20 @@ function expedienteHTML(n){
     <div class="hoja salto">${cabecera("RESUMEN", "Valorización N° " + String(p.n).padStart(2,"0"))}<div style="background:#0f172a;padding:10px;border-radius:6px">${cs.innerHTML}</div>
       <div class="nota2">Curva S: programado del cronograma frente a lo valorizado con los metrados registrados.</div></div>
     <div class="salto">${formatoHTML(n)}</div><div class="salto">${metradosHTML(n)}</div>
-    <div class="hoja">${S.vz?.obs ? `${cabecera("OBSERVACIONES DE LA VALORIZACIÓN", "Escritas al crear la valorización")}<p style="white-space:pre-wrap">${esc(S.vz.obs)}</p><h2>Mayor metrado</h2>` : cabecera("OBSERVACIONES DE MAYOR METRADO", "Tomadas de VZ_Observaciones del modelo")}${obs.length ? `<table><thead><tr><th>ElementId</th><th>Elemento</th><th>Nivel</th><th>Observación</th></tr></thead><tbody>${obs.map(e => `<tr><td>${e.id}</td><td>${esc(e.tipo)}</td><td>${esc(e.nivel)}</td><td>${esc(e.obs)}</td></tr>`).join("")}</tbody></table>` : "<p>Sin observaciones.</p>"}${firmas()}</div>`;
+    <div class="hoja">${S.vz?.obs ? `${cabecera("OBSERVACIONES DE LA VALORIZACIÓN", "Escritas al crear la valorización")}<p style="white-space:pre-wrap">${esc(S.vz.obs)}</p><h2>Mayor metrado</h2>` : cabecera("OBSERVACIONES DE MAYOR METRADO", "Alertas guardadas por el panel al registrar")}${obs.length ? `<table><thead><tr><th>ElementId</th><th>Elemento</th><th>Nivel</th><th>Observación</th></tr></thead><tbody>${obs.map(e => `<tr><td>${e.id}</td><td>${esc(e.tipo)}</td><td>${esc(e.nivel)}</td><td>${esc(e.obs)}</td></tr>`).join("")}</tbody></table>` : "<p>Sin observaciones.</p>"}${firmas()}</div>`;
 }
 $("#crearVz").onclick = () => formVz(null);
 ["#verFormato","#verMetrados","#verExpediente"].forEach(s => $(s).addEventListener("click", () => S.vz = null, true));
+/* Excel del mes elegido: usa la valorización creada si existe; si no, arma una con los metrados actuales y los datos de Configuración (no se guarda) */
+$("#excelMes").onclick = () => {
+  const n = +S.valN, guardada = VZ().find(x => x.n == n); if(guardada) return excelValorizacion(guardada).catch(e => alert("No se pudo generar el Excel: " + e.message));
+  const p = periodos().find(x => x.n == n), emp = ls("empresa") || {}, c = ls("formato") || {}, ant = {}, act = {}, det = [];
+  todos().forEach(r => { if(r.f < p.desde) ant[r.it] = (ant[r.it]||0) + r.q; else if(r.f <= p.hasta){ act[r.it] = (act[r.it]||0) + r.q;
+    det.push({f:r.f, it:r.it, q:r.q, id:r.id, el:r.id ? {tipo:r.el.tipo, nivel:r.el.nivel, paquete:r.el.paquete, sector:r.el.sector} : null}); } });
+  const v = {n:p.n, desde:p.desde, hasta:p.hasta, emision:hoy(), cab:{obra:emp.obra||"", empresa:emp.empresa||"", propietario:emp.propietario||"", ubicacion:emp.ubicacion||"", residente:emp.residente||"", supervisor:emp.supervisor||""},
+    ded:{adel:c.adel||"", mat:c.mat||"", ret:c.ret||""}, obs:"", estado:"Borrador", ant, act, det};
+  excelValorizacion(v).catch(e => alert("No se pudo generar el Excel: " + e.message)); };
+if(SNAP) $("#excelMes").hidden = true;
 $("#verFormato").onclick = () => { const c = ls("formato") || {}; $("#fAdel").value = c.adel ?? ""; $("#fMat").value = c.mat ?? ""; $("#fRet").value = c.ret ?? ""; abrirHoja("Formato de valorización", formatoHTML(S.valN), true); };
 $("#verMetrados").onclick = () => abrirHoja("Hoja de metrados", metradosHTML(S.valN), false);
 $("#verExpediente").onclick = () => abrirHoja("Expediente de valorización", expedienteHTML(S.valN), false);
@@ -782,7 +853,7 @@ function pControl(){
 /* ============================================================ 8 CONFIGURACIÓN */
 function pConfig(){
   const d = S.datos;
-  $("#conexion").innerHTML = `<table><tbody><tr><td>Estado</td><td>${SNAP ? "Instantánea de solo lectura (" + fmtD(SNAP.fecha) + ")" : LECTURA ? "Conectado en solo lectura" : "Conectado a Revit (lectura y escritura)"}</td></tr>
+  $("#conexion").innerHTML = `<table><tbody><tr><td>Estado</td><td>${SNAP ? "Instantánea de solo lectura (" + fmtD(SNAP.fecha) + ")" : LECTURA ? "Conectado en solo lectura" : "Conectado a Revit (los metrados se guardan en el panel)"}</td></tr>
     <tr><td>Modelo</td><td>${esc(d.modelo)}</td></tr><tr><td>Elementos</td><td>${S.els.length} con datos · ${S.geo ? S.geo.elementos.length : 0} con geometría</td></tr>
     <tr><td>Parámetros por crear</td><td>${(d.parametrosFaltan||[]).join(", ") || "ninguno"}</td></tr>
     <tr><td>Presupuesto</td><td>${esc(CRONO?.fuentePresupuesto || "—")} · ${S.partidas.length} partidas · CD S/ ${nf(BAC())}</td></tr>
@@ -919,6 +990,8 @@ addEventListener("hashchange", () => { const p = location.hash.slice(1); if(TITU
   ir(location.hash.slice(1) || ls("pag") || "inicio");
   try{
     await cargarDatos();
+    // si hoy es antes del inicio de obra, el corte por defecto es el último día con metrados registrados
+    if(CRONO && hoy() < CRONO.inicio){ const ult = todos().reduce((m,r) => r.f > m ? r.f : m, ""); if(ult){ $("#corte").value = ult; pintar(); } }
     S.geo = await api("/api/geometria"); V.cargar(S.geo); pintar();
   }catch(e){ estado("err", "Sin conexión con Revit: " + e.message);
     $("#kpis").innerHTML = `<div class="kpi" style="grid-column:1/-1"><small>Sin conexión</small><b class="err" style="font-size:15px">${esc(e.message)}</b><span>Abre Revit con el modelo y pulsa «NEXO OBRA (NO) → Abrir panel».</span></div>`; }

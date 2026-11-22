@@ -1,28 +1,22 @@
-# Credenciales y configuración local
-.env
-.env.*
-!.env.example
-*.pem
-*.key
-*.pfx
-*.p12
-
-# Archivos generados
-**/bin/
-**/bin_out/
-**/obj/
-__pycache__/
-*.py[cod]
+﻿# Compilados de Visual Studio (se regeneran)
+bin/
+obj/
+*.pdb
+*.cache
 .vs/
-.idea/
-*.user
-*.suo
 
-# Respaldos y temporales
-Respaldos/
-*.????.rvt
+*.rfa
 *.bak
-*.tmp
-~$*
-.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Repo vacío creado por GitHub (su README se copió a la raíz)
+NEXO OBRASS/
+
+# Sistema
 Thumbs.db
+desktop.ini
+.env

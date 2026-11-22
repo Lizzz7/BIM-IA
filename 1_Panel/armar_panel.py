@@ -1,4 +1,4 @@
-"""Arma 1_Panel/index.html: toma panel_fuente.html e incrusta el cronograma programado y los coeficientes de materiales del APU.
+﻿"""Arma 1_Panel/index.html: toma panel_fuente.html e incrusta el cronograma programado y los coeficientes de materiales del APU.
 
 Fuentes (no se inventa nada):
   datos/nexo_no_datos.json                         actividades, periodos, feriados (4_Python/cronograma_nexo.py)
@@ -17,7 +17,7 @@ from cronograma_nexo import leer_presupuesto  # noqa: E402
 crono = json.loads((AQUI / "datos" / "nexo_no_datos.json").read_text(encoding="utf-8"))
 modelo = crono["proyecto"]["modelo"]
 pr = json.loads((AQUI.parent / "3_Modelo_y_parametros" / f"parametros_revit_{modelo}.json").read_text(encoding="utf-8"))
-pres = AQUI.parent / "5_Documentacion" / f"Presupuesto_Estructuras_{modelo}_v2.xlsx"
+pres = AQUI.parent / "5_Documentacion" / f"Presupuesto_Estructuras_{modelo}_v3.xlsx"
 _, _, _, apu = leer_presupuesto(pres)
 recursos, coef = {}, {}
 for it, a in apu.items():
@@ -40,6 +40,12 @@ fuente = (AQUI / "panel_fuente.html").read_text(encoding="utf-8")
 marca = "/*__CRONOGRAMA__*/null"
 assert marca in fuente, "falta la marca del cronograma en panel_fuente.html"
 html = fuente.replace(marca, json.dumps(datos, ensure_ascii=False, separators=(",", ":")))
+assert "/*__EXCEL__*/" in html, "falta la marca del generador de Excel"
+# Librería ExcelJS 4.4.0 incrustada (lib/exceljs.min.js, de cdnjs): el Excel se genera sin internet
+lib = (AQUI / "lib" / "exceljs.min.js").read_text(encoding="utf-8").replace("</script", "<\\/script")
+assert "<!--__EXCELJS__-->" in html, "falta la marca de la librería ExcelJS"
+html = html.replace("<!--__EXCELJS__-->", "<script>" + lib + "</script>")
+html = html.replace("/*__EXCEL__*/", (AQUI / "excel_valorizacion.js").read_text(encoding="utf-8"))
 (AQUI / "index.html").write_text(html, encoding="utf-8")
 print(f"index.html listo: {len(datos['actividades'])} actividades, {len(datos['elementos'])} elementos, "
       f"{len(recursos)} materiales, {len(html) // 1024} KB")

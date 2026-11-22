@@ -62,7 +62,7 @@ namespace NexoObraNO
                     if (req.ContentType == null || !req.ContentType.StartsWith("application/json")) { await Enviar(res, 415, Error("El cuerpo debe ser JSON.")); return; }
                     string cuerpo; using (var sr = new StreamReader(req.InputStream, Encoding.UTF8)) cuerpo = await sr.ReadToEndAsync();
                     var pedido = JsonSerializer.Deserialize<PedidoMetrado>(cuerpo);
-                    await Enviar(res, 200, await puente.EjecutarAsync(app => Escritura.Registrar(app, cfg, pedido), cfg.esperaRevitMs));
+                    await Enviar(res, 200, Escritura.Registrar(cfg, pedido));      // no toca el modelo de Revit
                 }
                 else await Enviar(res, 404, Error("No existe " + req.HttpMethod + " " + req.Url.AbsolutePath));
             }
