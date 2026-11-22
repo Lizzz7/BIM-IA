@@ -1,0 +1,5 @@
+estado/
+modelos/
+*.zip
+__pycache__/
+pruebas/_estado_prueba/
