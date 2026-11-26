@@ -12,6 +12,7 @@ Variables de entorno
   NEXO_TOKEN=<secreto>                           para escribir hay que entrar una vez con /entrar?token=<secreto>
   NEXO_TOKEN_ADMIN=<secreto>                     para publicar versiones: POST /api/admin/publicar (cabecera X-Nexo-Admin)
   NEXO_LLM_POR_MINUTO=30                         límite de llamadas a la IA por IP
+  NEXO_MAX_NUBE_MB=400                           tamaño máximo de una nube de puntos subida (avance por dron)
   NEXO_LLM y las del proveedor                   ver nexo_ia/llm.py
 """
 import gzip
@@ -31,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from nexo_ia import auditor, bitacora, llm, narrador, parte_diario
+from nexo_ia import auditor, bitacora, escaneo, llm, narrador, nube_io, parte_diario, sintetico
 from nexo_ia import datos as D
 
 AQUI = Path(__file__).resolve().parent
@@ -43,6 +44,7 @@ TOKEN = os.environ.get("NEXO_TOKEN", "")
 TOKEN_ADMIN = os.environ.get("NEXO_TOKEN_ADMIN", "")
 LLM_POR_MINUTO = int(os.environ.get("NEXO_LLM_POR_MINUTO", "30"))
 MAX_ZIP = int(os.environ.get("NEXO_MAX_MB", "200")) * 1024 * 1024
+MAX_NUBE = int(os.environ.get("NEXO_MAX_NUBE_MB", "400")) * 1024 * 1024
 ID_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 _candados = defaultdict(threading.Lock)        # un candado por (modelo, uso): un modelo no bloquea a otro
@@ -381,6 +383,8 @@ class Manejador(BaseHTTPRequestHandler):
                                    "modelo": m.resumen(), "huellas": m.huellas, "modelos_ml": auditoria()["modelos"]})
             elif ruta == "/api/ia/auditoria":
                 self._enviar(200, {"ok": True, **auditoria()})
+            elif ruta == "/api/ia/escaneo":               # último escaneo procesado de este modelo
+                self._enviar(200, escaneo.ultimo() or {"ok": True, "vacio": True})
             elif ruta == "/api/ia/bitacora":
                 self._enviar(200, {"ok": True, "eventos": bitacora.leer(min(int((q.get("n") or [200])[0]), 2000))})
             elif ruta == "/api/ia/bitacora.jsonl":
@@ -415,6 +419,17 @@ class Manejador(BaseHTTPRequestHandler):
                 threading.Thread(target=precalcular, daemon=True).start()
                 self._enviar(200, {"ok": True, **r, "modelos": D.listar()})
                 return
+            if ruta == "/api/ia/escaneo/subir":           # cuerpo = archivo de nube (.ply/.las/.laz/.xyz/.pts) tal cual
+                self.exigir_escritura()
+                limitar(self.ip())
+                if n > MAX_NUBE:
+                    raise ValueError(f"La nube supera {MAX_NUBE // 2**20} MB: submuestréala (p. ej. 3-5 cm) en CloudCompare o WebODM")
+                self.elegir_modelo(q)
+                nombre = os.path.basename((q.get("nombre") or ["nube.ply"])[0])[:120]
+                nube = nube_io.leer(self.rfile.read(n), nombre)
+                with candado("escaneo"):
+                    self._enviar(200, escaneo.procesar(nube, (q.get("fecha") or [None])[0], nombre))
+                return
             if n > 2 * 1024 * 1024:
                 raise ValueError("Petición demasiado grande")
             ped = json.loads(self.rfile.read(n) or b"{}")
@@ -436,6 +451,15 @@ class Manejador(BaseHTTPRequestHandler):
                                      motivo=(ped.get("motivo") or "")[:500], usuario=(ped.get("usuario") or "anónimo")[:80],
                                      ip=self.ip(), impacto_soles=h["impacto_soles"])
                 self._enviar(200, {"ok": True, "evento": ev})
+            elif ruta == "/api/ia/escaneo/demo":         # nube sintética con verdad conocida, generada desde el modelo
+                self.exigir_escritura()
+                limitar(self.ip())
+                fecha = str(ped.get("fecha") or "2027-06-30")[:10]
+                with candado("escaneo"):
+                    nube, verdad, _ = sintetico.generar(fecha, semilla=int(ped.get("semilla", 7)),
+                                                        falsos_registrados=int(ped.get("falsos", 2)),
+                                                        ruido=float(ped.get("ruido", 0.02)), huecos=float(ped.get("huecos", 0.15)))
+                    self._enviar(200, escaneo.procesar(nube, fecha, f"sintética {fecha} (semilla {verdad['semilla']})", verdad=verdad))
             elif ruta == "/api/ia/parte":
                 limitar(self.ip())
                 self._enviar(200, {"ok": True, **parte_diario.procesar(str(ped.get("texto", ""))[:2000], ped.get("fecha"))})
@@ -457,6 +481,14 @@ def main():
         print(f"  · {mm['id']} {mm['vigente']} ({len(mm['versiones'])} versión/es): {len(D.elementos())} elementos, "
               f"{len(a['hallazgos'])} hallazgos, datos v.{D.huellas()['version_datos']}")
     print(f"  LLM: {llm.PROVEEDOR} · {llm.MODELO}" + ("" if llm.disponible() else "  (sin modelo: redacción por plantilla)"))
+
+    def precalentar_escaneo():                   # puntos de referencia del modelo (≈5 s por versión)
+        for mm in modelos:
+            try:
+                D.usar(mm["id"]); escaneo.referencia()
+            except Exception as ex:  # noqa: BLE001
+                print(f"[escaneo] {mm['id']}: {ex}")
+    threading.Thread(target=precalentar_escaneo, daemon=True).start()
     modo = "SOLO LECTURA" if SOLO_LECTURA else ("escritura con token" if TOKEN else "escritura abierta (modo local)")
     srv = ThreadingHTTPServer((HOST, PUERTO), Manejador)
     srv.daemon_threads = True

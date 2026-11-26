@@ -154,6 +154,17 @@ Funciones puras `rXX() -> list[hallazgo]`. Cada hallazgo es un dict con: `id` (h
   - Evaluación: `pruebas/evaluar_parte_diario.py` mide precisión/recall a nivel (elemento, partida) y error en S/.
     Con reglas: 11/12 casos.
 
+### ④ Avance por dron (`escaneo.py`, `sintetico.py`, `nube_io.py`)
+Es el equivalente a un *diff* entre el estado deseado (modelo) y el observado (nube de puntos del dron):
+- **Entrada**: N puntos (x, y, z). **Referencia**: ~1 M puntos muestreados sobre los triángulos de cada elemento (la misma
+  geometría que dibuja el visor 3D), en caché por versión de datos.
+- **Alineación**: ICP rígido (Kabsch + KD-tree de scipy). Corrige el georreferenciado imperfecto (decenas de cm).
+- **Cobertura**: fracción de puntos de referencia *propios* del elemento con un punto de la nube a < 10 cm.
+- **Visibilidad**: z-buffer angular por cámara en numpy (sin GPU), usando la nube como obstáculo.
+- **Reglas**: umbrales explícitos + propagación por soporte (grafo «A se apoya en B» calculado con cajas 3D).
+- **Validación**: generador sintético con verdad conocida + `pruebas/evaluar_escaneo.py` (exactitud, precisión,
+  exhaustividad, alertas detectadas, error de alineación). Pruebas automáticas en `pruebas/test_escaneo.py`.
+
 ### Trazabilidad (`bitacora.py`)
 Log **append-only** en JSON Lines (`estado/<obra>/bitacora_ia.jsonl`). Cada evento guarda: timestamp, obra, versión,
 **hash de los datos de entrada** (`version_datos` = sha256 de los archivos fuente), proveedor/modelo de IA, entrada, salida,

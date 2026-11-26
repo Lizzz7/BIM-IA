@@ -6,7 +6,7 @@
   const e_ = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
   const sol = x => x == null ? "—" : "S/ " + Number(x).toLocaleString("es-PE", {minimumFractionDigits: 2, maximumFractionDigits: 2});
   const num = (x, d = 2) => Number(x).toLocaleString("es-PE", {minimumFractionDigits: d, maximumFractionDigits: d});
-  const IA = {aud: null, estado: null, filtro: "", abiertos: {}, narr: {}, parte: null, verTodos: false};
+  const IA = {aud: null, estado: null, filtro: "", abiertos: {}, narr: {}, parte: null, verTodos: false, dron: null, dronSim: null, dronInf: false};
   async function pide(ruta, cuerpo) {
     const r = await fetch(ruta, cuerpo ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cuerpo)} : {});
     const j = await r.json().catch(() => ({ok: false, error: "respuesta no válida"}));
@@ -235,6 +235,95 @@
     } catch (err) { $q("#iaTrazaC").innerHTML = e_(err.message); }
   }
 
+  /* ================================================================ AVANCE POR DRON (nube de puntos vs. modelo) */
+  const EST = {construido: ["Construido (medido)", "ok"], inferido: ["Inferido por secuencia", ""], dudoso: ["Dudoso · revisar", "warn"],
+    no_construido: ["No construido", "bad"], no_observable: ["No observable", ""]};
+  function pintarDron() {
+    const box = slot("parte", "iaDron", `<div class="fila" style="margin:0 0 8px;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">Avance por dron · nube de puntos vs. modelo <span class="ia-badge">✦ IA</span></h3>
+        <span class="nota" id="iaDronMeta" style="margin:0"></span></div>
+      <div class="fila" style="margin:0;gap:8px;flex-wrap:wrap;align-items:center">
+        <label class="nota" style="margin:0">Fecha del vuelo <input type="date" class="inp" id="iaDronFecha"></label>
+        <input type="file" id="iaDronArchivo" accept=".ply,.las,.laz,.xyz,.pts,.txt,.csv" class="inp" style="max-width:260px">
+        <button class="btn sm pri" id="iaDronSubir">✦ Procesar nube</button>
+        <button class="btn sm" id="iaDronDemo" title="Genera una nube desde el modelo con verdad conocida (avance según cronograma, atrasos y 2 registros falsos sembrados)">Probar con nube sintética</button></div>
+      <div class="nota" style="margin:6px 0 0">Nube de WebODM (.laz/.ply) o exportada de ReCap (.pts/.ply), en coordenadas del modelo (puntos de control en ejes del proyecto). El sistema la alinea (ICP), mide cada elemento y propone el metrado; nada se registra sin tu confirmación.</div>
+      <div id="iaDronRes"></div>`, ".grid");
+    if (!box) return;
+    if (!box.dataset.listo) {
+      box.dataset.listo = 1;
+      $q("#iaDronFecha").value = (window.S && S.diaSel) || corte();
+      $q("#iaDronSubir").onclick = subirNube;
+      $q("#iaDronDemo").onclick = demoNube;
+      if (!IA.dron) pide("/api/ia/escaneo").then(r => { if (!r.vacio) { IA.dron = r; pintarResultadoDron(); } }).catch(() => {});
+    }
+    if (IA.dron) pintarResultadoDron();
+  }
+
+  async function subirNube() {
+    const f = $q("#iaDronArchivo").files[0]; if (!f) { alert("Elige un archivo de nube de puntos"); return; }
+    $q("#iaDronRes").innerHTML = `<div class="vacio">Subiendo ${e_(f.name)} (${num(f.size / 1048576, 1)} MB) y comparando con el modelo…</div>`;
+    try {
+      const r = await fetch(`/api/ia/escaneo/subir?fecha=${encodeURIComponent($q("#iaDronFecha").value)}&nombre=${encodeURIComponent(f.name)}`, {method: "POST", body: f});
+      const j = await r.json(); if (!r.ok || j.ok === false) throw new Error(j.error || "HTTP " + r.status);
+      IA.dron = j; IA.dronSim = null; pintarResultadoDron();
+    } catch (err) { $q("#iaDronRes").innerHTML = `<div class="vacio">${e_(err.message)}</div>`; }
+  }
+  async function demoNube() {
+    $q("#iaDronRes").innerHTML = '<div class="vacio">Generando la nube sintética desde el modelo y comparándola (≈20 s)…</div>';
+    try { IA.dron = await pide("/api/ia/escaneo/demo", {fecha: $q("#iaDronFecha").value}); IA.dronSim = null; pintarResultadoDron(); }
+    catch (err) { $q("#iaDronRes").innerHTML = `<div class="vacio">${e_(err.message)}</div>`; }
+  }
+
+  function pintarResultadoDron() {
+    const d = IA.dron, sim = IA.dronSim; if (!d || !$q("#iaDronRes")) return;
+    const a = d.avance, al = d.alineacion || {}, inc = !!IA.dronInf;
+    $q("#iaDronMeta").innerHTML = `${e_(d.nombre)} · ${num(d.parametros.puntos_nube, 0)} puntos · ${num(d.segundos, 1)} s · datos v.${e_(d.version_datos)}`;
+    let h = `<div class="ia-chips"><div class="ia-chip on"><b>${num(a.total.avance_pct, 1)} %</b><span>avance físico (${num(a.total.construido_m3, 1)} de ${num(a.total.total_m3, 1)} m³ de concreto)</span></div>` +
+      Object.entries(EST).map(([k, [t]]) => `<div class="ia-chip" data-est="${k}"><b>${a.conteo[k]}</b><span>${t}</span></div>`).join("") + `</div>`;
+    h += `<div class="ia-kv"><div>Alineación ICP</div><div>${al.aplicada ? `desplazamiento ${al.traslacion_m.map(x => num(x, 3)).join(" / ")} m · giro ${num(al.giro_z_grados, 2)}° · residuo ${num(al.rmse_m * 100, 1)} cm` : "sin alinear"}</div>
+      <div>Criterio</div><div>construido si ≥ ${num(d.parametros.cobertura_construido * 100, 0)} % de su parte visible tiene puntos a &lt; ${num(d.parametros.tolerancia_m * 100, 0)} cm; no se juzga lo que el dron no puede ver (&lt; ${num(d.parametros.min_fraccion_visible * 100, 0)} % visible)</div></div>`;
+    if (d.metricas) {
+      const m = d.metricas, x = m.alertas_valorizacion || {}, ea = m.error_alineacion || {};
+      h += `<div class="ia-caja"><b>Validación contra la verdad conocida</b> <span class="ia-met det">nube sintética</span>
+        <div class="ia-kv"><div>Exactitud</div><div><b>${num(m.exactitud * 100, 1)} %</b> en ${m.decididos} elementos decididos · precisión ${num(m.precision_construido * 100, 1)} % · exhaustividad ${num(m.exhaustividad_construido * 100, 1)} %</div>
+        <div>Sin decidir</div><div>${m.sin_decidir.construido + m.sin_decidir.no_construido} (el sistema los marca para revisión en vez de adivinar)</div>
+        <div>Alertas sembradas</div><div>${x.detectadas ?? "—"} de ${x.sembradas ?? "—"} detectadas · ${x.falsas_alarmas ?? 0} falsas alarmas</div>
+        <div>Error de alineación</div><div>${ea.traslacion_m != null ? `${num(ea.traslacion_m * 100, 2)} cm · ${num(ea.giro_grados, 3)}°` : "—"}</div></div></div>`;
+    }
+    if (d.alertas_valorizacion.length) h += `<div class="ia-caja"><div class="lbl" style="margin-top:0">Registrado pero el dron no lo confirma (${d.alertas_valorizacion.length})</div>` +
+      d.alertas_valorizacion.map((x, i) => `<div class="ia-fila" style="margin-top:6px"><span class="tag ${x.severidad === "alta" ? "bad" : "warn"}">${x.severidad}</span><div class="t">${e_(x.texto)}</div>
+        <b style="white-space:nowrap">${sol(x.monto_registrado)}</b><button class="btn sm" data-alerta="${i}">Ver en 3D</button></div>`).join("") + `</div>`;
+    h += `<table style="margin-top:10px"><thead><tr><th>Nivel</th><th class="n">Medido</th><th class="n">Inferido</th><th class="n">Dudoso</th><th class="n">No constr.</th><th class="n">No observ.</th><th class="n">Avance</th></tr></thead><tbody>` +
+      a.por_nivel.map(n => `<tr><td>${e_(n.nivel)}</td><td class="n">${n.construido}</td><td class="n">${n.inferido}</td><td class="n">${n.dudoso}</td><td class="n">${n.no_construido}</td><td class="n">${n.no_observable}</td><td class="n">${num(n.avance_pct, 1)} %</td></tr>`).join("") + `</tbody></table>`;
+    const res = d.resumen.concat(inc ? d.resumen_inferidos : []), regs = d.registros.concat(inc ? d.registros_inferidos : []);
+    const total = d.monto_total + (inc ? d.monto_inferidos : 0);
+    h += `<div class="lbl" style="margin-top:12px">Propuesta de registro: lo que el dron ve construido y aún no está registrado</div>`;
+    if (!res.length) h += '<div class="vacio">Nada nuevo por registrar.</div>';
+    h += res.map((r, i) => `<div class="ia-caja"><div class="ia-fila"><div class="t"><b>${e_(r.nivel)} · ${e_(r.nombre_grupo)}</b>
+        <div class="nota" style="margin:2px 0 0">${r.n_elementos} elementos · ${e_(r.origen)}</div></div><button class="btn sm" data-res="${i}">Ver en 3D</button></div>
+        <table style="margin-top:6px"><tbody>${r.partidas.map(x => `<tr><td>${e_(x.item)} <span class="nota">${e_(x.desc)}</span></td><td class="n">${num(x.cantidad, 3)} ${e_(x.und)}</td><td class="n">${sol(x.monto)}</td></tr>`).join("")}</tbody></table></div>`).join("");
+    if (sim) h += `<div class="ia-caja"><div class="lbl" style="margin-top:0">Validación del sistema (simulación, no se guardó)</div>
+        <div>${sim.aplicados.length} valores aceptados · ${sim.rechazados.length} rechazados</div>
+        ${sim.alertas.length ? `<div class="ia-mal">${sim.alertas.slice(0, 8).map(e_).join("<br>")}</div>` : '<div class="ia-ok">✔ sin alertas de mayor metrado</div>'}</div>`;
+    h += `<div class="fila" style="margin-top:10px;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+        <label class="nota" style="margin:0;flex:1"><input type="checkbox" id="iaDronInf" ${inc ? "checked" : ""}> incluir inferidos (${d.registros_inferidos.length} valores, ${sol(d.monto_inferidos)}): ocultos por lo construido encima</label>
+        <b>${sol(total)} · ${regs.length} valores</b>${regs.length ? `<button class="btn sm" id="iaDronSim">Validar con el sistema</button>${escribe() ? `<button class="btn sm pri" id="iaDronReg" ${sim ? "" : "disabled title='Primero valida'"}>Registrar ${e_(fmtD(d.fecha))}</button>` : ""}` : ""}</div>`;
+    $q("#iaDronRes").innerHTML = h;
+    const R = $q("#iaDronRes");
+    $q("#iaDron").querySelectorAll("[data-est]").forEach(c => c.onclick = () => { const ids = d.ids_por_estado[c.dataset.est]; if (!ids.length) return aviso("Ningún elemento en ese estado"); ir("visor"); resaltar(ids, "Dron · " + EST[c.dataset.est][0]); });
+    R.querySelectorAll("[data-alerta]").forEach(b => b.onclick = () => { const x = d.alertas_valorizacion[+b.dataset.alerta]; ir("visor"); resaltar([x.id], "Dron · registrado y no visto"); });
+    R.querySelectorAll("[data-res]").forEach(b => b.onclick = () => { const r = res[+b.dataset.res]; ir("visor"); resaltar(r.elementos, `Dron · ${r.nivel} ${r.nombre_grupo}`); });
+    $q("#iaDronInf").onchange = ev => { IA.dronInf = ev.target.checked; IA.dronSim = null; pintarResultadoDron(); };
+    if ($q("#iaDronSim")) $q("#iaDronSim").onclick = async () => { try { IA.dronSim = await pide("/api/metrado", {fecha: d.fecha, simular: true, registros: regs}); pintarResultadoDron(); } catch (err) { alert(err.message); } };
+    if ($q("#iaDronReg")) $q("#iaDronReg").onclick = async () => {
+      if (!confirm(`Se registrarán ${regs.length} valores (${sol(total)}) con fecha ${fmtD(d.fecha)} a partir del vuelo del dron. ¿Continuar?`)) return;
+      try { const r = await pide("/api/metrado", {fecha: d.fecha, simular: false, registros: regs, origen: "ia-dron"});
+        IA.dronSim = null; IA.aud = null; d.registros = []; d.registros_inferidos = []; d.resumen = []; d.resumen_inferidos = []; d.monto_total = d.monto_inferidos = 0;
+        pintarResultadoDron(); aviso(`Registrado: ${r.aplicados.length} valores desde el vuelo`); S.diaSel = d.fecha; await cargarDatos(); }
+      catch (err) { alert("No se pudo registrar: " + err.message); } };
+  }
+
   /* ================================================================ enganche con el panel */
   function envolver(nombre, extra) {
     const orig = window[nombre] || eval(nombre);            // las funciones del panel son globales
@@ -242,7 +331,7 @@
     try { eval(nombre + " = nueva"); } catch (err) { console.error("[IA] no se pudo enganchar " + nombre, err); }
   }
   envolver("pControl", pintarAuditoria);
-  envolver("pParte", pintarParte);
+  envolver("pParte", () => { pintarParte(); pintarDron(); });
   envolver("pValorizaciones", pintarSemaforo);
   envolver("pConfig", pintarTraza);
   /* ================================================================ SELECTOR DE MODELO Y VERSIÓN (cabecera) */
