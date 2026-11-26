@@ -385,6 +385,13 @@ class Manejador(BaseHTTPRequestHandler):
                 self._enviar(200, {"ok": True, **auditoria()})
             elif ruta == "/api/ia/escaneo":               # último escaneo procesado de este modelo
                 self._enviar(200, escaneo.ultimo() or {"ok": True, "vacio": True})
+            elif ruta == "/api/ia/escaneo/nube.bin":      # nube alineada para el visor (binario compacto)
+                self._enviar(200, escaneo.vista_binaria(), "application/octet-stream")
+            elif ruta == "/api/ia/escaneo/nube.ply":      # la misma nube, con color, para CloudCompare / ReCap / Revit
+                tmp = D.estado() / "escaneo_vista.ply"
+                escaneo.vista_ply(tmp)
+                self._enviar(200, tmp.read_bytes(), "application/octet-stream",
+                             extra={"Content-Disposition": f'attachment; filename="nube_alineada_{m.id}.ply"'})
             elif ruta == "/api/ia/bitacora":
                 self._enviar(200, {"ok": True, "eventos": bitacora.leer(min(int((q.get("n") or [200])[0]), 2000))})
             elif ruta == "/api/ia/bitacora.jsonl":
@@ -426,9 +433,9 @@ class Manejador(BaseHTTPRequestHandler):
                     raise ValueError(f"La nube supera {MAX_NUBE // 2**20} MB: submuestréala (p. ej. 3-5 cm) en CloudCompare o WebODM")
                 self.elegir_modelo(q)
                 nombre = os.path.basename((q.get("nombre") or ["nube.ply"])[0])[:120]
-                nube = nube_io.leer(self.rfile.read(n), nombre)
+                nube, rgb = nube_io.leer_con_color(self.rfile.read(n), nombre)
                 with candado("escaneo"):
-                    self._enviar(200, escaneo.procesar(nube, (q.get("fecha") or [None])[0], nombre))
+                    self._enviar(200, escaneo.procesar(nube, (q.get("fecha") or [None])[0], nombre, rgb=rgb))
                 return
             if n > 2 * 1024 * 1024:
                 raise ValueError("Petición demasiado grande")
@@ -456,10 +463,10 @@ class Manejador(BaseHTTPRequestHandler):
                 limitar(self.ip())
                 fecha = str(ped.get("fecha") or "2027-06-30")[:10]
                 with candado("escaneo"):
-                    nube, verdad, _ = sintetico.generar(fecha, semilla=int(ped.get("semilla", 7)),
+                    nube, verdad, _, rgb = sintetico.generar(fecha, semilla=int(ped.get("semilla", 7)),
                                                         falsos_registrados=int(ped.get("falsos", 2)),
                                                         ruido=float(ped.get("ruido", 0.02)), huecos=float(ped.get("huecos", 0.15)))
-                    self._enviar(200, escaneo.procesar(nube, fecha, f"sintética {fecha} (semilla {verdad['semilla']})", verdad=verdad))
+                    self._enviar(200, escaneo.procesar(nube, fecha, f"sintética {fecha} (semilla {verdad['semilla']})", verdad=verdad, rgb=rgb))
             elif ruta == "/api/ia/parte":
                 limitar(self.ip())
                 self._enviar(200, {"ok": True, **parte_diario.procesar(str(ped.get("texto", ""))[:2000], ped.get("fecha"))})

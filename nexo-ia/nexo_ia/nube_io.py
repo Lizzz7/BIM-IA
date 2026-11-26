@@ -19,6 +19,11 @@ _PLY_TIPOS = {"char": "i1", "int8": "i1", "uchar": "u1", "uint8": "u1", "short":
 
 def leer(ruta_o_bytes, nombre=None) -> np.ndarray:
     """Devuelve un array (N,3) float64 con x, y, z en metros."""
+    return leer_con_color(ruta_o_bytes, nombre)[0]
+
+
+def leer_con_color(ruta_o_bytes, nombre=None):
+    """(xyz (N,3) float64, rgb (N,3) uint8 o None si la nube no trae color)."""
     if isinstance(ruta_o_bytes, (str, Path)):
         nombre = nombre or str(ruta_o_bytes)
         datos = Path(ruta_o_bytes).read_bytes()
@@ -33,14 +38,29 @@ def leer(ruta_o_bytes, nombre=None) -> np.ndarray:
         except ImportError as ex:
             raise ValueError("Para .las/.laz instala laspy (pip install 'laspy[lazrs]') o exporta la nube a .ply") from ex
         las = laspy.read(io.BytesIO(datos))
-        return np.c_[las.x, las.y, las.z].astype(float)
+        xyz = np.c_[las.x, las.y, las.z].astype(float)
+        try:
+            rgb = np.c_[las.red, las.green, las.blue]
+            rgb = (rgb >> 8 if rgb.max() > 255 else rgb).astype(np.uint8)
+        except Exception:  # noqa: BLE001  (LAS sin color)
+            rgb = None
+        return xyz, rgb
     if ext in (".xyz", ".txt", ".pts", ".csv", ""):
         texto = datos.decode("utf-8", "replace")
         filas = [ln for ln in texto.splitlines() if ln.strip() and not re.match(r"^\s*[A-Za-z#/]", ln)]
         if ext == ".pts" and filas and len(filas[0].split()) == 1:   # .pts de ReCap: la 1.ª línea es el conteo
             filas = filas[1:]
-        arr = np.array([[float(v) for v in re.split(r"[\s,;]+", ln.strip())[:3]] for ln in filas if len(re.split(r"[\s,;]+", ln.strip())) >= 3])
-        return arr.reshape(-1, 3)
+        cols = [re.split(r"[\s,;]+", ln.strip()) for ln in filas]
+        cols = [c for c in cols if len(c) >= 3]
+        arr = np.array([[float(v) for v in c[:3]] for c in cols]).reshape(-1, 3)
+        rgb = None
+        if cols and all(len(c) >= 6 for c in cols):              # x y z r g b  (o x y z intensidad r g b en .pts)
+            k = 4 if all(len(c) >= 7 for c in cols) else 3
+            try:
+                rgb = np.clip(np.array([[float(v) for v in c[k:k + 3]] for c in cols]), 0, 255).astype(np.uint8)
+            except ValueError:
+                rgb = None
+        return arr, rgb
     raise ValueError(f"Formato de nube no soportado: {ext} (usa .ply, .xyz, .pts, .las o .laz)")
 
 
@@ -75,7 +95,12 @@ def _leer_ply(datos: bytes) -> np.ndarray:
         salto = sum(e["n"] for e in elementos[:elementos.index(vert)])
         filas = [ln.split() for ln in lineas[salto:salto + vert["n"]]]
         A = np.array([[float(f[nombres.index(c)]) for c in "xyz"] for f in filas])
-        return A
+        rgb = None
+        cn = _nombres_color(nombres)
+        if cn:
+            rgb = np.array([[float(f[nombres.index(c)]) for c in cn] for f in filas])
+            rgb = (rgb * 255 if rgb.max() <= 1.0 else rgb).clip(0, 255).astype(np.uint8)
+        return A, rgb
     if any(x[0] == "__lista__" for x in vert["props"]):
         raise ValueError("PLY binario con listas en vertex: no soportado")
     orden = "<" if "little" in formato else ">"
@@ -86,7 +111,19 @@ def _leer_ply(datos: bytes) -> np.ndarray:
             raise ValueError("PLY binario con listas antes de vertex: no soportado")
         off += e["n"] * np.dtype([(x[0], orden + _PLY_TIPOS[x[1]]) for x in e["props"]]).itemsize
     v = np.frombuffer(cuerpo, dtype=dt, count=vert["n"], offset=off)
-    return np.c_[v["x"], v["y"], v["z"]].astype(float)
+    rgb = None
+    cn = _nombres_color(nombres)
+    if cn:
+        rgb = np.c_[v[cn[0]], v[cn[1]], v[cn[2]]].astype(float)
+        rgb = (rgb * 255 if rgb.max() <= 1.0 else rgb / 257 if rgb.max() > 255 else rgb).clip(0, 255).astype(np.uint8)
+    return np.c_[v["x"], v["y"], v["z"]].astype(float), rgb
+
+
+def _nombres_color(nombres):
+    for t in (("red", "green", "blue"), ("diffuse_red", "diffuse_green", "diffuse_blue"), ("r", "g", "b")):
+        if all(x in nombres for x in t):
+            return t
+    return None
 
 
 def escribir_ply(ruta, xyz: np.ndarray, rgb: np.ndarray = None):
@@ -111,8 +148,13 @@ def escribir_ply(ruta, xyz: np.ndarray, rgb: np.ndarray = None):
 
 def submuestrear(xyz: np.ndarray, voxel: float) -> np.ndarray:
     """Un punto (el primero) por vóxel de lado `voxel` m."""
-    if len(xyz) == 0:
-        return xyz
+    return xyz[indices_voxel(xyz, voxel)] if len(xyz) else xyz
+
+
+def indices_voxel(xyz: np.ndarray, voxel: float) -> np.ndarray:
     k = np.floor((xyz - xyz.min(0)) / voxel).astype(np.int64)
-    _, idx = np.unique(k, axis=0, return_index=True)
-    return xyz[np.sort(idx)]
+    k -= k.min(0)
+    m = k.max(0) + 1
+    clave = (k[:, 0] * m[1] + k[:, 1]) * m[2] + k[:, 2]
+    _, idx = np.unique(clave, return_index=True)
+    return np.sort(idx)

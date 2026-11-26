@@ -40,7 +40,7 @@ def test_icp_recupera_desalineacion():
 
 
 def test_escaneo_sintetico_acierta_y_alerta():
-    nube, verdad, _ = S.generar("2027-06-30", semilla=7)
+    nube, verdad, _, _ = S.generar("2027-06-30", semilla=7)
     r = X.procesar(nube, "2027-06-30", "prueba", verdad=verdad)
     m = r["metricas"]
     assert m["exactitud"] >= 0.97 and m["precision_construido"] >= 0.95 and m["exhaustividad_construido"] >= 0.95

@@ -97,6 +97,13 @@ NEXO_LLM=anthropic ANTHROPIC_API_KEY=… python3 servidor.py
 
 ![Avance por dron](captura_dron.png)
 
+![Nube del dron sobre el modelo](captura_nube.png)
+
+**Visor de la nube** (botón «Ver la nube de puntos en 3D»): los puntos alineados sobre el modelo, que se colorea por el
+estado decidido. Tres modos de color: *color real* de las fotos, *distancia al modelo* (verde ≤ 4 cm, ámbar 4–10 cm,
+rojo > 10 cm, magenta = fuera del modelo: grúa, terreno, vecinos) y *estado del elemento*. Corte por altura para ver
+dentro. «Descargar nube alineada (.ply)» la abre en CloudCompare, ReCap o Revit.
+
 Panel → **Parte diario → «Avance por dron»**. Entra la nube de puntos del vuelo (WebODM `.laz/.ply`, ReCap `.pts`) y sale
 el estado de **cada elemento del modelo** + la propuesta de metrado, en el mismo formato que el parte diario asistido.
 
@@ -115,17 +122,20 @@ nube ─► ICP contra el modelo ─► por elemento: % de su superficie PROPIA 
 
 ### Validación con verdad conocida (`python3 pruebas/evaluar_escaneo.py`)
 Nubes sintéticas generadas desde el propio modelo: construido = lo programado hasta la fecha de corte, menos vaciados
-retrasados al azar (y todo lo que se apoya en ellos); 2 registros falsos sembrados; grúa, andamio, material y encofrado
-que no están en el BIM; oclusión desde el plan de vuelo; ruido, huecos y desalineación de hasta 30 cm y 0.8°.
+retrasados al azar (y todo lo que se apoya en ellos); 2 registros falsos sembrados. Para que se parezcan a un vuelo real:
+color por material (concreto más oscuro si es reciente, suelo, sillar de los vecinos), grúa, andamio, material acopiado,
+encofrado, arranques de acero, excavación y medianeras; oclusión desde el plan de vuelo; densidad que cae con la
+distancia a la cámara, huecos en manchas, error a lo largo del rayo de la cámara, puntos sueltos en bordes y
+desalineación de hasta 30 cm y 0.8°.
 
 | Escenario | Exactitud | Precisión | Exhaustividad | Decididos | Sin decidir | Alertas | Error ICP |
 |---|---|---|---|---|---|---|---|
-| Fin de mes 3 (sótanos) | 100.0 % | 100.0 % | 100.0 % | 1145 | 121 | 2/2 | 0.37 cm |
-| Fin de mes 6 (base) | 99.9 % | 100.0 % | 99.3 % | 1100 | 166 | 2/2 | 0.22 cm |
-| Fin de mes 6 · ruido 4 cm, 30 % huecos | 99.9 % | 99.3 % | 100.0 % | 1131 | 135 | 2/2 | 0.18 cm |
-| Fin de mes 9 (casco alto) | 100.0 % | 100.0 % | 100.0 % | 1067 | 199 | 1/1 | 0.37 cm |
-| Fin de mes 9 · sin oclusión (cota superior) | 100.0 % | 100.0 % | 100.0 % | 1206 | 60 | 1/1 | 0.13 cm |
-| Fin de mes 6 · sin alinear (control) | 99.2 % | 99.3 % | 94.4 % | 1090 | 176 | 2/2 | sin ICP |
+| Fin de mes 3 (sótanos) | 100.0 % | 100.0 % | 100.0 % | 1130 | 136 | 2/2 | 26.1 cm |
+| Fin de mes 6 (base) | 99.9 % | 100.0 % | 99.3 % | 1084 | 182 | 2/2 | 0.1 cm |
+| Fin de mes 6 · ruido 4 cm, 30 % huecos | 99.9 % | 100.0 % | 99.3 % | 1113 | 153 | 2/2 | 0.3 cm |
+| Fin de mes 9 (casco alto) | 100.0 % | 100.0 % | 100.0 % | 1031 | 235 | 1/1 | 0.2 cm |
+| Fin de mes 9 · sin oclusión (cota superior) | 100.0 % | 100.0 % | 100.0 % | 1191 | 75 | 1/1 | 0.1 cm |
+| Fin de mes 6 · sin alinear (control) | 99.3 % | 98.6 % | 95.9 % | 1089 | 177 | 2/2 | sin ICP |
 
 «Sin decidir» = no observables o dudosos: se envían a revisión en vez de adivinar. El control sin ICP muestra por qué
 la alineación es necesaria. **Pendiente: validar con el vuelo real** (medir 5–10 distancias con wincha y comparar).
@@ -134,6 +144,8 @@ la alineación es necesaria. **Pendiente: validar con el vuelo real** (medir 5�
 - Lo interior bajo losa no se ve desde el aire: se infiere por secuencia constructiva, no se mide.
 - Encofrado pegado al elemento (< 10 cm) puede confundirse con concreto; el color de la nube (madera vs. concreto) sería el siguiente paso.
 - Las nubes sintéticas no reemplazan un vuelo real: miden la lógica, no la calidad de la fotogrametría.
+- Con poca estructura en común (solo excavación y sótanos, mes 3) el ICP puede desviarse decenas de cm: el sistema lo
+  avisa (< 25 % de puntos emparejados) y hay que apoyarse en los puntos de control.
 
 ## Límites (decirlos en la presentación)
 - Herramienta académica: los hallazgos son para revisión de un ingeniero; ninguno se aplica solo.

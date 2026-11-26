@@ -30,7 +30,7 @@ ESCENARIOS = [
 
 def correr(esc):
     p = {k: v for k, v in esc.items() if not k.startswith("_") and k != "nombre"}
-    nube, verdad, _ = S.generar(**p)
+    nube, verdad, _, _ = S.generar(**p)
     r = X.procesar(nube, verdad["fecha_corte"], esc["nombre"], verdad=verdad, alinear=esc.get("_alinear", True))
     m = r["metricas"]
     return {"escenario": esc["nombre"], "puntos": verdad["puntos"], "construidos_reales": len(verdad["construidos"]),
