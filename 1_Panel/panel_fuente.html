@@ -146,6 +146,7 @@ dialog{background:var(--surf);color:var(--tx);border:1px solid var(--bd2);border
   .f-hoja{padding:8px} .hoja{padding:14px} .hoja .res{grid-template-columns:1fr 1fr} .f-bar .campo{white-space:normal}
 }
 </style>
+<!--__REVISION_CSS__-->
 </head>
 <body>
 <div class="app">
@@ -158,12 +159,13 @@ dialog{background:var(--surf);color:var(--tx);border:1px solid var(--bd2);border
     <a data-pag="cronograma"><i>◷</i><span>Cronograma</span></a>
     <a data-pag="valorizaciones"><i>S/</i><span>Valorizaciones</span></a>
     <a data-pag="control"><i>⚠</i><span>Control</span></a>
+    <a data-pag="revision"><i>✧</i><span>Revisión IA</span></a>
     <a data-pag="config"><i>⚙</i><span>Configuración</span></a>
     <div class="sp"></div><div class="ver" id="ver"></div>
   </nav>
   <header>
     <div class="crumb"><b id="crumbObra">NEXO OBRA (NO)</b> / <span id="crumbPag">Inicio</span></div>
-    <div class="estado" id="estado"><i></i><span>Conectando con Revit…</span></div>
+    <div class="estado" id="estado"><i></i><span>Cargando datos…</span></div>
     <div class="sp"></div>
     <label class="campo">Fecha de corte <input type="date" class="inp" id="corte"></label>
     <button class="btn" id="recargar" title="Volver a leer el modelo y los metrados registrados">↻</button>
@@ -254,6 +256,9 @@ dialog{background:var(--surf);color:var(--tx);border:1px solid var(--bd2);border
       </div>
       <div class="card" style="margin-top:14px"><h3>Mes siguiente: actividades que empiezan y materiales a pedir</h3><div id="siguiente"></div></div>
     </section>
+    <section class="pag" id="pag-revision" hidden>
+      <div id="revisionApp"><div class="card">Inicia el servidor independiente para utilizar la revisión de presupuestos.</div></div>
+    </section>
     <!-- 8 CONFIGURACIÓN -->
     <section class="pag" id="pag-config" hidden>
       <div class="grid" style="grid-template-columns:1fr 1fr">
@@ -303,7 +308,8 @@ function estado(cls, msg){ const e = $("#estado"); e.className = "estado " + cls
 function dialogo(html, botones){ return new Promise(res => { $("#dlgCuerpo").innerHTML = html; const b = $("#dlgBotones"); b.innerHTML = "";
   botones.forEach(([txt, val, cls]) => { const x = document.createElement("button"); x.className = "btn " + (cls||""); x.textContent = txt; x.onclick = () => { $("#dlg").close(); res(val); }; b.appendChild(x); });
   $("#dlg").showModal(); }); }
-function ls(k, v){ try{ if(v === undefined) return JSON.parse(localStorage.getItem("nexoNO_" + k)); localStorage.setItem("nexoNO_" + k, JSON.stringify(v)); }catch(e){ return null; } }
+function ls(k, v){ try{ const clave = "nexoNO_" + (S.datos?.proyecto_id || S.datos?.modelo || "sin-proyecto") + "_" + k;
+  if(v === undefined) return JSON.parse(localStorage.getItem(clave)); localStorage.setItem(clave, JSON.stringify(v)); }catch(e){ return null; } }
 
 /* calendario de obra: lunes a sábado, sin feriados (del cronograma) */
 const FER = new Set(CRONO ? CRONO.feriados : []);
@@ -351,12 +357,13 @@ async function cargarDatos(){
   $("#crumbObra").textContent = (ls("empresa")?.obra) || ("NEXO OBRA (NO) · " + d.modelo);
   const faltan = d.parametrosFaltan || [];
   if(SNAP) estado("ro", `Solo lectura · datos al ${fmtD(SNAP.fecha)} · deja tus sugerencias en los comentarios de la página`);
-  else estado(LECTURA ? "ro" : "ok", `Revit: ${d.modelo} · ${S.els.length} elementos` + (LECTURA ? " · solo lectura" : "") + " · metrados guardados en el panel");
+  else estado(LECTURA ? "ro" : "ok", `${d.modo === "exportado" ? "Sin Revit · exportación" : "Revit"}: ${d.modelo} · ${S.els.length} elementos` + (LECTURA ? " · solo lectura" : ""));
+  $("#ver").textContent = d.modo === "exportado" ? "Prototipo académico · datos de prueba" : (LECTURA ? "Solo lectura" : "");
   pintar();
 }
 
 /* ============================================================ navegación */
-const TITULOS = {inicio:"Inicio", visor:"Visor 3D", partidas:"Partidas y metrado diario", parte:"Parte diario", cronograma:"Cronograma", valorizaciones:"Valorizaciones", control:"Control y alertas", config:"Configuración"};
+const TITULOS = {inicio:"Inicio", visor:"Visor 3D", partidas:"Partidas y metrado diario", parte:"Parte diario", cronograma:"Cronograma", valorizaciones:"Valorizaciones", control:"Control y alertas", revision:"Revisión inteligente de presupuestos", config:"Configuración"};
 const SLOT = {inicio:"#slotInicio", visor:"#slotVisor", partidas:"#slotPartidas"};
 function ir(p){ if(!TITULOS[p]) p = "inicio"; S.pag = p; ls("pag", p); if(location.hash !== "#" + p) history.replaceState(null, "", "#" + p);
   document.querySelectorAll("#rail a").forEach(a => a.classList.toggle("on", a.dataset.pag === p));
@@ -364,7 +371,7 @@ function ir(p){ if(!TITULOS[p]) p = "inicio"; S.pag = p; ls("pag", p); if(locati
   $("#crumbPag").textContent = TITULOS[p]; if(SLOT[p]) V.montar($(SLOT[p])); pintar(); }
 document.querySelectorAll("#rail a").forEach(a => a.addEventListener("click", () => ir(a.dataset.pag)));
 function pintar(){ if(!S.datos) return;
-  ({inicio:pInicio, visor:pVisor, partidas:pPartidas, parte:pParte, cronograma:pCronograma, valorizaciones:pValorizaciones, control:pControl, config:pConfig})[S.pag]();
+  ({inicio:pInicio, visor:pVisor, partidas:pPartidas, parte:pParte, cronograma:pCronograma, valorizaciones:pValorizaciones, control:pControl, revision:() => window.NexoRevision?.pintar(), config:pConfig})[S.pag]();
   V.colorear(); }
 
 /* ============================================================ gráficos SVG */
@@ -576,18 +583,25 @@ function detalleElemento(box, e){
   if($("#regEl")) $("#regEl").onclick = () => { const r = [...box.querySelectorAll("input[data-item]")].map(i => ({id:e.id, item:i.dataset.item, cantidad:parseFloat(i.value)})).filter(r => r.cantidad && !isNaN(r.cantidad));
     if(!r.length) return toast("Escribe al menos una cantidad."); registrar(r); };
 }
+let METRADO_PENDIENTE = null, GUARDANDO_METRADO = false;
 async function registrar(registros){
   if(LECTURA) return toast("Modo solo lectura.");
+  if(GUARDANDO_METRADO) return toast("Guardando el registro anterior…");
   const fecha = fechaParte(); if(!fecha) return toast("Elige la fecha del parte.");
   registros = registros.filter(r => r.cantidad && !isNaN(r.cantidad)); if(!registros.length) return toast("Cantidad no válida.");
+  const contenido = JSON.stringify({fecha, registros});
+  if(METRADO_PENDIENTE?.contenido !== contenido) METRADO_PENDIENTE = {contenido, id:crypto.randomUUID()};
+  GUARDANDO_METRADO = true;
   try{
-    const r = await api("/api/metrado", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({fecha, simular:false, registros})});
+    const r = await api("/api/metrado", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({fecha, simular:false, registros, request_id:METRADO_PENDIENTE.id})});
+    METRADO_PENDIENTE = null;
     r.elementos.forEach(x => { const e = S.porId[x.id]; if(e){ e.registro = x.registro; e.obs = x.obs; e.regs = parsear(x.registro); e.ejec = sumar(e.regs); } });
     S.globalRegs = parsear(r.registroGlobal); S.global = sumar(S.globalRegs); pintar();
     if(r.alertas.length) alert("ALERTA DE MAYOR METRADO\n\n" + r.alertas.join("\n") + "\n\nQuedó anotado en las observaciones del elemento en el panel.");
     if(r.rechazados.length) alert("No se registraron:\n" + r.rechazados.map(x => `${x.id||"Partida"} ${x.item}: ${x.motivo}`).join("\n"));
     toast(`Metrado guardado en el panel: ${r.aplicados.length} valores`);
   }catch(err){ alert("No se pudo guardar el metrado:\n" + err.message); }
+  finally{ GUARDANDO_METRADO = false; }
 }
 
 /* ============================================================ 4 PARTE DIARIO */
@@ -666,7 +680,9 @@ function datosVal(n){
 
 /* ---------- valorizaciones creadas: se guardan con sus datos (cabecera, deducciones, metrados) y se pueden editar */
 const VZ = () => ls("valorizaciones") || [];
-function totalVz(v){ const pie = S.datos.pie, cd = r2(Object.entries(v.act).reduce((s,[it,q]) => s + r2(r2(q)*pu(it)), 0));
+const presupuestoVz = v => v?.presupuesto || {partidas:S.partidas, capitulos:S.datos.capitulos, pie:S.datos.pie, version:S.datos.presupuesto_version || CRONO?.fuentePresupuesto};
+function totalVz(v){ const pre = presupuestoVz(v), pie = pre.pie, precios = Object.fromEntries(pre.partidas.map(p => [p.item,p.pu]));
+  const cd = r2(Object.entries(v.act).reduce((s,[it,q]) => s + r2(r2(q)*(precios[it]||0)), 0));
   const sub = r2(cd + r2(cd*(pie.gg||0)) + r2(cd*(pie.ut||0))), bruta = r2(sub + r2(sub*(pie.igv||0)));
   return {cd, bruta, neto: r2(bruta - r2(bruta*(parseFloat(v.ded.adel)||0)/100) - r2(bruta*(parseFloat(v.ded.ret)||0)/100) - (parseFloat(v.ded.mat)||0))}; }
 async function formVz(existente){
@@ -693,6 +709,7 @@ async function formVz(existente){
   v.n = existente ? v.n : +g("n"); v.desde = g("desde"); v.hasta = g("hasta"); v.emision = g("emision"); v.obs = $("#vz_obs").value;
   if(!v.desde || !v.hasta || v.desde > v.hasta) return alert("Revisa el periodo: la fecha «desde» debe ser anterior o igual a «hasta».");
   ["obra","empresa","propietario","ubicacion","residente","supervisor"].forEach(k => v.cab[k] = g(k)); ["adel","mat","ret"].forEach(k => v.ded[k] = g(k));
+  if(!v.presupuesto) v.presupuesto = JSON.parse(JSON.stringify(presupuestoVz(null)));
   if(!existente || $("#vz_recalc")?.checked){       // congela los metrados del periodo
     const ant = {}, act = {}, det = [];
     todos().forEach(r => { if(r.f < v.desde) ant[r.it] = (ant[r.it]||0) + r.q; else if(r.f <= v.hasta){ act[r.it] = (act[r.it]||0) + r.q;
@@ -748,12 +765,12 @@ function cabecera(titulo, sub){ const emp = empresaDoc(), logo = ls("logo");
 function firmas(){ const emp = empresaDoc(); return `<div class="firmas"><div>Residente de obra<br>${esc(emp.residente||"")}</div><div>Supervisión<br>${esc(emp.supervisor||"")}</div><div>Propietario<br>${esc(emp.propietario||"")}</div></div>`; }
 function abrirHoja(titulo, html, campos){ $("#fTitulo").textContent = titulo; $("#fCampos").hidden = !campos; $("#fHoja").innerHTML = html; $("#formato").hidden = false; }
 function formatoHTML(n){
-  const {p, ant, act} = datosVal(n), pie = S.datos.pie, gg = pie.gg||0, ut = pie.ut||0, igv = pie.igv||0, c = S.vz ? S.vz.ded : (ls("formato") || {});
+  const {p, ant, act} = datosVal(n), pre = presupuestoVz(S.vz), pie = pre.pie, gg = pie.gg||0, ut = pie.ut||0, igv = pie.igv||0, c = S.vz ? S.vz.ded : (ls("formato") || {});
   const adel = (parseFloat(c.adel)||0)/100, mat = parseFloat(c.mat)||0, ret = (parseFloat(c.ret)||0)/100;
-  const filas = [...Object.entries(S.datos.capitulos).map(([it, d]) => ({it, d, cap:true})), ...S.partidas.map(x => ({it:x.item, x}))].sort((a,b) => a.it.localeCompare(b.it, "es", {numeric:true}));
+  const filas = [...Object.entries(pre.capitulos).map(([it, d]) => ({it, d, cap:true})), ...pre.partidas.map(x => ({it:x.item, x}))].sort((a,b) => a.it.localeCompare(b.it, "es", {numeric:true}));
   /* Regla S10: metrados a 2 decimales, monto = ROUND(metrado x P.U.; 2), acumulado = anterior + del mes; indirectos redondeados a 2 */
   const linP = x => { const a = r2(ant[x.item]||0), m = r2(act[x.item]||0), aS = r2(a*x.pu), mS = r2(m*x.pu); return {a, m, ac:r2(a+m), aS, mS, acS:r2(aS+mS), pre:r2(x.metrado*x.pu)}; };
-  const tot = it => { const t = {pre:0, ant:0, act:0}; S.partidas.forEach(x => { if(x.item.startsWith(it + ".")){ const l = linP(x); t.pre += l.pre; t.ant += l.aS; t.act += l.mS; } }); return t; };
+  const tot = it => { const t = {pre:0, ant:0, act:0}; pre.partidas.forEach(x => { if(x.item.startsWith(it + ".")){ const l = linP(x); t.pre += l.pre; t.ant += l.aS; t.act += l.mS; } }); return t; };
   let cuerpo = "", T = {pre:0, ant:0, act:0};
   filas.forEach(f => {
     if(f.cap){ const t = tot(f.it); if(!t.pre) return; const ac = t.ant + t.act;
@@ -779,7 +796,7 @@ function formatoHTML(n){
       <tr><td>IGV</td><td class="n">${nf(r2(sub(T.act)*igv))}</td><td class="n">${nf(igv*100,2)}% del subtotal</td></tr><tr class="tot"><td>Valorización bruta del mes</td><td class="n">${nf(bruta)}</td><td></td></tr>
       <tr><td>(-) Amortización de adelanto directo</td><td class="n">${nf(-aAdel)}</td><td class="n">${nf(adel*100,2)}%</td></tr><tr><td>(-) Amortización de adelanto de materiales</td><td class="n">${nf(-mat)}</td><td></td></tr>
       <tr><td>(-) Retención por fondo de garantía</td><td class="n">${nf(-aRet)}</td><td class="n">${nf(ret*100,2)}%</td></tr><tr class="neto"><td>NETO A PAGAR</td><td class="n">${nf(neto)}</td><td></td></tr></tbody></table>
-    <div class="nota2">Gastos generales, utilidad e IGV: presupuesto S10 v2. Amortizaciones y retención: las escribe el usuario. Programado: cronograma (lunes a sábado). «Mayor metrado»: acumulado mayor al contrato.</div>${firmas()}</div>`;
+    <div class="nota2">Referencia del presupuesto: ${esc(pre.version || "no disponible")}. ${S.vz?.presupuesto ? "Cantidades de referencia, PU e indirectos conservados al crear el documento." : "Vista en vivo o documento antiguo sin versión congelada."} Amortizaciones y retención: las escribe el usuario. Programado: cronograma. «Mayor metrado»: acumulado mayor a la referencia.</div>${firmas()}</div>`;
 }
 /*__EXCEL__*/
 function metradosHTML(n){
@@ -853,7 +870,7 @@ function pControl(){
 /* ============================================================ 8 CONFIGURACIÓN */
 function pConfig(){
   const d = S.datos;
-  $("#conexion").innerHTML = `<table><tbody><tr><td>Estado</td><td>${SNAP ? "Instantánea de solo lectura (" + fmtD(SNAP.fecha) + ")" : LECTURA ? "Conectado en solo lectura" : "Conectado a Revit (los metrados se guardan en el panel)"}</td></tr>
+  $("#conexion").innerHTML = `<table><tbody><tr><td>Estado</td><td>${SNAP ? "Instantánea de solo lectura (" + fmtD(SNAP.fecha) + ")" : LECTURA ? "Conectado en solo lectura" : d.modo === "exportado" ? "Exportaciones BIM · Revit no es necesario · registros en SQLite local" : "Conectado a Revit (los metrados se guardan en el panel)"}</td></tr>
     <tr><td>Modelo</td><td>${esc(d.modelo)}</td></tr><tr><td>Elementos</td><td>${S.els.length} con datos · ${S.geo ? S.geo.elementos.length : 0} con geometría</td></tr>
     <tr><td>Parámetros por crear</td><td>${(d.parametrosFaltan||[]).join(", ") || "ninguno"}</td></tr>
     <tr><td>Presupuesto</td><td>${esc(CRONO?.fuentePresupuesto || "—")} · ${S.partidas.length} partidas · CD S/ ${nf(BAC())}</td></tr>
@@ -982,9 +999,9 @@ const V = (() => {
 /* ============================================================ inicio */
 $("#corte").value = hoy();
 $("#corte").addEventListener("change", pintar);
-$("#recargar").addEventListener("click", () => cargarDatos().then(() => toast("Datos actualizados desde Revit")).catch(e => estado("err", e.message)));
+$("#recargar").addEventListener("click", () => cargarDatos().then(() => toast("Datos actualizados desde la fuente")).catch(e => estado("err", e.message)));
 $("#ver").textContent = LECTURA ? "Solo lectura" : "";
-if(SNAP){ ["#fImprimir", "#csv", "#recargar"].forEach(s => $(s).hidden = true); }   // en la página publicada no se imprime ni se descarga
+if(SNAP){ ["#fImprimir", "#csv", "#recargar", '[data-pag="revision"]'].forEach(s => $(s).hidden = true); }   // instantánea sin API de revisión
 addEventListener("hashchange", () => { const p = location.hash.slice(1); if(TITULOS[p] && p !== S.pag) ir(p); });
 (async () => {
   ir(location.hash.slice(1) || ls("pag") || "inicio");
@@ -993,9 +1010,10 @@ addEventListener("hashchange", () => { const p = location.hash.slice(1); if(TITU
     // si hoy es antes del inicio de obra, el corte por defecto es el último día con metrados registrados
     if(CRONO && hoy() < CRONO.inicio){ const ult = todos().reduce((m,r) => r.f > m ? r.f : m, ""); if(ult){ $("#corte").value = ult; pintar(); } }
     S.geo = await api("/api/geometria"); V.cargar(S.geo); pintar();
-  }catch(e){ estado("err", "Sin conexión con Revit: " + e.message);
-    $("#kpis").innerHTML = `<div class="kpi" style="grid-column:1/-1"><small>Sin conexión</small><b class="err" style="font-size:15px">${esc(e.message)}</b><span>Abre Revit con el modelo y pulsa «NEXO OBRA (NO) → Abrir panel».</span></div>`; }
+  }catch(e){ estado("err", "No se pudo cargar la fuente: " + e.message);
+    $("#kpis").innerHTML = `<div class="kpi" style="grid-column:1/-1"><small>Sin conexión</small><b class="err" style="font-size:15px">${esc(e.message)}</b><span>Inicia python nexo-ia/servidor.py y abre http://127.0.0.1:8771/; alternativamente utiliza el complemento de Revit.</span></div>`; }
 })();
 </script>
+<!--__REVISION_JS__-->
 </body>
 </html>

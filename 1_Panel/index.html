@@ -146,6 +146,31 @@ dialog{background:var(--surf);color:var(--tx);border:1px solid var(--bd2);border
   .f-hoja{padding:8px} .hoja{padding:14px} .hoja .res{grid-template-columns:1fr 1fr} .f-bar .campo{white-space:normal}
 }
 </style>
+<style>/* Módulo de revisión: utiliza la paleta y los componentes del panel existente. */
+.ia-hero{display:flex;justify-content:space-between;gap:20px;align-items:center;padding:22px;background:linear-gradient(120deg,#17243b,var(--surf));border:1px solid var(--bd2);border-radius:12px;margin-bottom:14px}
+.ia-hero h1{font-size:24px;margin:4px 0 8px}.ia-hero p{max-width:720px;color:var(--tx2);margin:0}
+.ia-eyebrow{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--gold)}
+.ia-mark{font-size:42px;color:var(--gold);padding:0 18px}
+.ia-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0}
+.ia-tabs button[aria-selected=true]{border-color:var(--gold);color:var(--gold)}
+.ia-banner{padding:12px 14px;border:1px solid var(--bd2);border-left:3px solid var(--gold);border-radius:8px;background:var(--elev);margin:12px 0;color:var(--tx2)}
+.ia-banner strong{color:var(--tx)}.ia-error{border-left-color:var(--bad);color:#fca5a5}
+.ia-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}
+.ia-columns{display:grid;grid-template-columns:minmax(320px,1.1fr) minmax(300px,1fr);gap:14px;align-items:start}
+.ia-results{max-height:62vh;overflow:auto}.ia-finding{width:100%;display:block;text-align:left;padding:13px;border:0;border-bottom:1px solid var(--bd);background:transparent;color:var(--tx);cursor:pointer}
+.ia-finding:hover,.ia-finding[aria-pressed=true]{background:var(--hover)}.ia-finding[aria-pressed=true]{box-shadow:inset 3px 0 var(--gold)}
+.ia-finding .fila{margin:0 0 6px}.ia-finding small{color:var(--tx2);display:block;margin-top:5px}
+.ia-detail h2{font-size:19px;margin-top:8px}.ia-detail p{color:var(--tx2)}.ia-detail pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);padding:12px;border:1px solid var(--bd);border-radius:8px;max-height:260px;overflow:auto;font-size:11px}
+.ia-detail textarea{width:100%;min-height:70px;padding:9px;resize:vertical}
+.ia-toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end}.ia-toolbar label{display:grid;gap:5px;color:var(--tx2)}
+.ia-toolbar select{max-width:100%}.ia-scroll{overflow:auto;max-height:55vh}
+.ia-table td{vertical-align:top}.ia-table .n{white-space:nowrap}.ia-table small{display:block;color:var(--mut)}
+.ia-coverage{margin:12px 0;color:var(--tx2);font-size:12px}.ia-coverage ul{padding-left:18px}
+.ia-empty{padding:35px 20px;text-align:center;color:var(--tx2)}
+.ia-status{min-height:20px;color:var(--tx2);margin-bottom:8px}
+@media(max-width:1050px){.ia-columns{grid-template-columns:1fr}.ia-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.ia-mark{display:none}.ia-results{max-height:42vh}}
+@media(max-width:600px){.ia-hero{padding:16px}.ia-hero h1{font-size:20px}.ia-toolbar label{width:100%}.ia-toolbar .inp{width:100%}}
+</style>
 </head>
 <body>
 <div class="app">
@@ -158,12 +183,13 @@ dialog{background:var(--surf);color:var(--tx);border:1px solid var(--bd2);border
     <a data-pag="cronograma"><i>◷</i><span>Cronograma</span></a>
     <a data-pag="valorizaciones"><i>S/</i><span>Valorizaciones</span></a>
     <a data-pag="control"><i>⚠</i><span>Control</span></a>
+    <a data-pag="revision"><i>✧</i><span>Revisión IA</span></a>
     <a data-pag="config"><i>⚙</i><span>Configuración</span></a>
     <div class="sp"></div><div class="ver" id="ver"></div>
   </nav>
   <header>
     <div class="crumb"><b id="crumbObra">NEXO OBRA (NO)</b> / <span id="crumbPag">Inicio</span></div>
-    <div class="estado" id="estado"><i></i><span>Conectando con Revit…</span></div>
+    <div class="estado" id="estado"><i></i><span>Cargando datos…</span></div>
     <div class="sp"></div>
     <label class="campo">Fecha de corte <input type="date" class="inp" id="corte"></label>
     <button class="btn" id="recargar" title="Volver a leer el modelo y los metrados registrados">↻</button>
@@ -253,6 +279,9 @@ dialog{background:var(--surf);color:var(--tx);border:1px solid var(--bd2);border
         <div class="card"><h3>Desvío del mes por partida</h3><div id="desvio"></div></div>
       </div>
       <div class="card" style="margin-top:14px"><h3>Mes siguiente: actividades que empiezan y materiales a pedir</h3><div id="siguiente"></div></div>
+    </section>
+    <section class="pag" id="pag-revision" hidden>
+      <div id="revisionApp"><div class="card">Inicia el servidor independiente para utilizar la revisión de presupuestos.</div></div>
     </section>
     <!-- 8 CONFIGURACIÓN -->
     <section class="pag" id="pag-config" hidden>
@@ -347,7 +376,8 @@ function estado(cls, msg){ const e = $("#estado"); e.className = "estado " + cls
 function dialogo(html, botones){ return new Promise(res => { $("#dlgCuerpo").innerHTML = html; const b = $("#dlgBotones"); b.innerHTML = "";
   botones.forEach(([txt, val, cls]) => { const x = document.createElement("button"); x.className = "btn " + (cls||""); x.textContent = txt; x.onclick = () => { $("#dlg").close(); res(val); }; b.appendChild(x); });
   $("#dlg").showModal(); }); }
-function ls(k, v){ try{ if(v === undefined) return JSON.parse(localStorage.getItem("nexoNO_" + k)); localStorage.setItem("nexoNO_" + k, JSON.stringify(v)); }catch(e){ return null; } }
+function ls(k, v){ try{ const clave = "nexoNO_" + (S.datos?.proyecto_id || S.datos?.modelo || "sin-proyecto") + "_" + k;
+  if(v === undefined) return JSON.parse(localStorage.getItem(clave)); localStorage.setItem(clave, JSON.stringify(v)); }catch(e){ return null; } }
 
 /* calendario de obra: lunes a sábado, sin feriados (del cronograma) */
 const FER = new Set(CRONO ? CRONO.feriados : []);
@@ -395,12 +425,13 @@ async function cargarDatos(){
   $("#crumbObra").textContent = (ls("empresa")?.obra) || ("NEXO OBRA (NO) · " + d.modelo);
   const faltan = d.parametrosFaltan || [];
   if(SNAP) estado("ro", `Solo lectura · datos al ${fmtD(SNAP.fecha)} · deja tus sugerencias en los comentarios de la página`);
-  else estado(LECTURA ? "ro" : "ok", `Revit: ${d.modelo} · ${S.els.length} elementos` + (LECTURA ? " · solo lectura" : "") + " · metrados guardados en el panel");
+  else estado(LECTURA ? "ro" : "ok", `${d.modo === "exportado" ? "Sin Revit · exportación" : "Revit"}: ${d.modelo} · ${S.els.length} elementos` + (LECTURA ? " · solo lectura" : ""));
+  $("#ver").textContent = d.modo === "exportado" ? "Prototipo académico · datos de prueba" : (LECTURA ? "Solo lectura" : "");
   pintar();
 }
 
 /* ============================================================ navegación */
-const TITULOS = {inicio:"Inicio", visor:"Visor 3D", partidas:"Partidas y metrado diario", parte:"Parte diario", cronograma:"Cronograma", valorizaciones:"Valorizaciones", control:"Control y alertas", config:"Configuración"};
+const TITULOS = {inicio:"Inicio", visor:"Visor 3D", partidas:"Partidas y metrado diario", parte:"Parte diario", cronograma:"Cronograma", valorizaciones:"Valorizaciones", control:"Control y alertas", revision:"Revisión inteligente de presupuestos", config:"Configuración"};
 const SLOT = {inicio:"#slotInicio", visor:"#slotVisor", partidas:"#slotPartidas"};
 function ir(p){ if(!TITULOS[p]) p = "inicio"; S.pag = p; ls("pag", p); if(location.hash !== "#" + p) history.replaceState(null, "", "#" + p);
   document.querySelectorAll("#rail a").forEach(a => a.classList.toggle("on", a.dataset.pag === p));
@@ -408,7 +439,7 @@ function ir(p){ if(!TITULOS[p]) p = "inicio"; S.pag = p; ls("pag", p); if(locati
   $("#crumbPag").textContent = TITULOS[p]; if(SLOT[p]) V.montar($(SLOT[p])); pintar(); }
 document.querySelectorAll("#rail a").forEach(a => a.addEventListener("click", () => ir(a.dataset.pag)));
 function pintar(){ if(!S.datos) return;
-  ({inicio:pInicio, visor:pVisor, partidas:pPartidas, parte:pParte, cronograma:pCronograma, valorizaciones:pValorizaciones, control:pControl, config:pConfig})[S.pag]();
+  ({inicio:pInicio, visor:pVisor, partidas:pPartidas, parte:pParte, cronograma:pCronograma, valorizaciones:pValorizaciones, control:pControl, revision:() => window.NexoRevision?.pintar(), config:pConfig})[S.pag]();
   V.colorear(); }
 
 /* ============================================================ gráficos SVG */
@@ -620,18 +651,25 @@ function detalleElemento(box, e){
   if($("#regEl")) $("#regEl").onclick = () => { const r = [...box.querySelectorAll("input[data-item]")].map(i => ({id:e.id, item:i.dataset.item, cantidad:parseFloat(i.value)})).filter(r => r.cantidad && !isNaN(r.cantidad));
     if(!r.length) return toast("Escribe al menos una cantidad."); registrar(r); };
 }
+let METRADO_PENDIENTE = null, GUARDANDO_METRADO = false;
 async function registrar(registros){
   if(LECTURA) return toast("Modo solo lectura.");
+  if(GUARDANDO_METRADO) return toast("Guardando el registro anterior…");
   const fecha = fechaParte(); if(!fecha) return toast("Elige la fecha del parte.");
   registros = registros.filter(r => r.cantidad && !isNaN(r.cantidad)); if(!registros.length) return toast("Cantidad no válida.");
+  const contenido = JSON.stringify({fecha, registros});
+  if(METRADO_PENDIENTE?.contenido !== contenido) METRADO_PENDIENTE = {contenido, id:crypto.randomUUID()};
+  GUARDANDO_METRADO = true;
   try{
-    const r = await api("/api/metrado", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({fecha, simular:false, registros})});
+    const r = await api("/api/metrado", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({fecha, simular:false, registros, request_id:METRADO_PENDIENTE.id})});
+    METRADO_PENDIENTE = null;
     r.elementos.forEach(x => { const e = S.porId[x.id]; if(e){ e.registro = x.registro; e.obs = x.obs; e.regs = parsear(x.registro); e.ejec = sumar(e.regs); } });
     S.globalRegs = parsear(r.registroGlobal); S.global = sumar(S.globalRegs); pintar();
     if(r.alertas.length) alert("ALERTA DE MAYOR METRADO\n\n" + r.alertas.join("\n") + "\n\nQuedó anotado en las observaciones del elemento en el panel.");
     if(r.rechazados.length) alert("No se registraron:\n" + r.rechazados.map(x => `${x.id||"Partida"} ${x.item}: ${x.motivo}`).join("\n"));
     toast(`Metrado guardado en el panel: ${r.aplicados.length} valores`);
   }catch(err){ alert("No se pudo guardar el metrado:\n" + err.message); }
+  finally{ GUARDANDO_METRADO = false; }
 }
 
 /* ============================================================ 4 PARTE DIARIO */
@@ -710,7 +748,9 @@ function datosVal(n){
 
 /* ---------- valorizaciones creadas: se guardan con sus datos (cabecera, deducciones, metrados) y se pueden editar */
 const VZ = () => ls("valorizaciones") || [];
-function totalVz(v){ const pie = S.datos.pie, cd = r2(Object.entries(v.act).reduce((s,[it,q]) => s + r2(r2(q)*pu(it)), 0));
+const presupuestoVz = v => v?.presupuesto || {partidas:S.partidas, capitulos:S.datos.capitulos, pie:S.datos.pie, version:S.datos.presupuesto_version || CRONO?.fuentePresupuesto};
+function totalVz(v){ const pre = presupuestoVz(v), pie = pre.pie, precios = Object.fromEntries(pre.partidas.map(p => [p.item,p.pu]));
+  const cd = r2(Object.entries(v.act).reduce((s,[it,q]) => s + r2(r2(q)*(precios[it]||0)), 0));
   const sub = r2(cd + r2(cd*(pie.gg||0)) + r2(cd*(pie.ut||0))), bruta = r2(sub + r2(sub*(pie.igv||0)));
   return {cd, bruta, neto: r2(bruta - r2(bruta*(parseFloat(v.ded.adel)||0)/100) - r2(bruta*(parseFloat(v.ded.ret)||0)/100) - (parseFloat(v.ded.mat)||0))}; }
 async function formVz(existente){
@@ -737,6 +777,7 @@ async function formVz(existente){
   v.n = existente ? v.n : +g("n"); v.desde = g("desde"); v.hasta = g("hasta"); v.emision = g("emision"); v.obs = $("#vz_obs").value;
   if(!v.desde || !v.hasta || v.desde > v.hasta) return alert("Revisa el periodo: la fecha «desde» debe ser anterior o igual a «hasta».");
   ["obra","empresa","propietario","ubicacion","residente","supervisor"].forEach(k => v.cab[k] = g(k)); ["adel","mat","ret"].forEach(k => v.ded[k] = g(k));
+  if(!v.presupuesto) v.presupuesto = JSON.parse(JSON.stringify(presupuestoVz(null)));
   if(!existente || $("#vz_recalc")?.checked){       // congela los metrados del periodo
     const ant = {}, act = {}, det = [];
     todos().forEach(r => { if(r.f < v.desde) ant[r.it] = (ant[r.it]||0) + r.q; else if(r.f <= v.hasta){ act[r.it] = (act[r.it]||0) + r.q;
@@ -792,12 +833,12 @@ function cabecera(titulo, sub){ const emp = empresaDoc(), logo = ls("logo");
 function firmas(){ const emp = empresaDoc(); return `<div class="firmas"><div>Residente de obra<br>${esc(emp.residente||"")}</div><div>Supervisión<br>${esc(emp.supervisor||"")}</div><div>Propietario<br>${esc(emp.propietario||"")}</div></div>`; }
 function abrirHoja(titulo, html, campos){ $("#fTitulo").textContent = titulo; $("#fCampos").hidden = !campos; $("#fHoja").innerHTML = html; $("#formato").hidden = false; }
 function formatoHTML(n){
-  const {p, ant, act} = datosVal(n), pie = S.datos.pie, gg = pie.gg||0, ut = pie.ut||0, igv = pie.igv||0, c = S.vz ? S.vz.ded : (ls("formato") || {});
+  const {p, ant, act} = datosVal(n), pre = presupuestoVz(S.vz), pie = pre.pie, gg = pie.gg||0, ut = pie.ut||0, igv = pie.igv||0, c = S.vz ? S.vz.ded : (ls("formato") || {});
   const adel = (parseFloat(c.adel)||0)/100, mat = parseFloat(c.mat)||0, ret = (parseFloat(c.ret)||0)/100;
-  const filas = [...Object.entries(S.datos.capitulos).map(([it, d]) => ({it, d, cap:true})), ...S.partidas.map(x => ({it:x.item, x}))].sort((a,b) => a.it.localeCompare(b.it, "es", {numeric:true}));
+  const filas = [...Object.entries(pre.capitulos).map(([it, d]) => ({it, d, cap:true})), ...pre.partidas.map(x => ({it:x.item, x}))].sort((a,b) => a.it.localeCompare(b.it, "es", {numeric:true}));
   /* Regla S10: metrados a 2 decimales, monto = ROUND(metrado x P.U.; 2), acumulado = anterior + del mes; indirectos redondeados a 2 */
   const linP = x => { const a = r2(ant[x.item]||0), m = r2(act[x.item]||0), aS = r2(a*x.pu), mS = r2(m*x.pu); return {a, m, ac:r2(a+m), aS, mS, acS:r2(aS+mS), pre:r2(x.metrado*x.pu)}; };
-  const tot = it => { const t = {pre:0, ant:0, act:0}; S.partidas.forEach(x => { if(x.item.startsWith(it + ".")){ const l = linP(x); t.pre += l.pre; t.ant += l.aS; t.act += l.mS; } }); return t; };
+  const tot = it => { const t = {pre:0, ant:0, act:0}; pre.partidas.forEach(x => { if(x.item.startsWith(it + ".")){ const l = linP(x); t.pre += l.pre; t.ant += l.aS; t.act += l.mS; } }); return t; };
   let cuerpo = "", T = {pre:0, ant:0, act:0};
   filas.forEach(f => {
     if(f.cap){ const t = tot(f.it); if(!t.pre) return; const ac = t.ant + t.act;
@@ -823,7 +864,7 @@ function formatoHTML(n){
       <tr><td>IGV</td><td class="n">${nf(r2(sub(T.act)*igv))}</td><td class="n">${nf(igv*100,2)}% del subtotal</td></tr><tr class="tot"><td>Valorización bruta del mes</td><td class="n">${nf(bruta)}</td><td></td></tr>
       <tr><td>(-) Amortización de adelanto directo</td><td class="n">${nf(-aAdel)}</td><td class="n">${nf(adel*100,2)}%</td></tr><tr><td>(-) Amortización de adelanto de materiales</td><td class="n">${nf(-mat)}</td><td></td></tr>
       <tr><td>(-) Retención por fondo de garantía</td><td class="n">${nf(-aRet)}</td><td class="n">${nf(ret*100,2)}%</td></tr><tr class="neto"><td>NETO A PAGAR</td><td class="n">${nf(neto)}</td><td></td></tr></tbody></table>
-    <div class="nota2">Gastos generales, utilidad e IGV: presupuesto S10 v2. Amortizaciones y retención: las escribe el usuario. Programado: cronograma (lunes a sábado). «Mayor metrado»: acumulado mayor al contrato.</div>${firmas()}</div>`;
+    <div class="nota2">Referencia del presupuesto: ${esc(pre.version || "no disponible")}. ${S.vz?.presupuesto ? "Cantidades de referencia, PU e indirectos conservados al crear el documento." : "Vista en vivo o documento antiguo sin versión congelada."} Amortizaciones y retención: las escribe el usuario. Programado: cronograma. «Mayor metrado»: acumulado mayor a la referencia.</div>${firmas()}</div>`;
 }
 /* ============================================================ EXCEL DE LA VALORIZACIÓN (con fórmulas)
    NEXO OBRA (NO) · se incrusta en el panel con armar_panel.py.
@@ -853,7 +894,9 @@ async function excelValorizacion(v, descargar = true){
   if(!v) return; await cargarExcelJS(); toast("Generando el Excel…");
   const NAVY = "FF101827", NAVY2 = "FF1C2840", GOLD = "FFE5B869", CLARO = "FFF3F5F9", BORDE = "FFB8C2D3", TX = "FF0F172A", MES = "FFFFF7E6", AZUL = "FF1D4ED8";
   const wb = new ExcelJS.Workbook(); wb.creator = "NEXO OBRA (NO)"; wb.calcProperties.fullCalcOnLoad = true;
-  const pie = S.datos.pie, cab = v.cab, N2 = '#,##0.00;-#,##0.00;"-"', P4 = '0.00%;-0.00%;"-"', nn = String(v.n).padStart(2,"0");
+  const pre = presupuestoVz(v), partidasDoc = pre.partidas, preciosDoc = Object.fromEntries(partidasDoc.map(p => [p.item,p.pu]));
+  const precioDoc = it => preciosDoc[it] || 0;
+  const pie = pre.pie, cab = v.cab, N2 = '#,##0.00;-#,##0.00;"-"', P4 = '0.00%;-0.00%;"-"', nn = String(v.n).padStart(2,"0");
   const periodoTxt = `del ${fmtD(v.desde)} al ${fmtD(v.hasta)}`, obra = cab.obra || S.datos.modelo + " · casco estructural";
   const fino = {style:"thin", color:{argb:BORDE}}, caja = {top:fino, left:fino, bottom:fino, right:fino};
   const hoja = (nombre, ancho) => { const ws = wb.addWorksheet(nombre, {views:[{showGridLines:false}],
@@ -879,8 +922,8 @@ async function excelValorizacion(v, descargar = true){
   const ws = hoja("D.02 CURVA S", [8, 40, 15, 9, 15, 9, 15, 9, 15, 9]), wp = hoja("D.03 PROGRAMADO VS EJECUTADO");
   const VQ = "'D.02 VALORIZACION MENSUAL'", DQ = "'D.01 METRADOS DIARIOS'", RQ = "'D.02 RESUMEN VALORIZACION'";
 
-  const filas = [...Object.entries(S.datos.capitulos).map(([it, d]) => ({it, d, cap:true})), ...S.partidas.map(x => ({it:x.item, x}))]
-    .filter(f => !f.cap || S.partidas.some(x => x.item.startsWith(f.it + "."))).sort((a,b) => a.it.localeCompare(b.it, "es", {numeric:true}));
+  const filas = [...Object.entries(pre.capitulos).map(([it, d]) => ({it, d, cap:true})), ...partidasDoc.map(x => ({it:x.item, x}))]
+    .filter(f => !f.cap || partidasDoc.some(x => x.item.startsWith(f.it + "."))).sort((a,b) => a.it.localeCompare(b.it, "es", {numeric:true}));
   const ant = v.ant, act = v.act;
 
   // ---------- METRADOS DIARIOS
@@ -918,7 +961,7 @@ async function excelValorizacion(v, descargar = true){
     celda(wv, `M${r}`, {formula:`G${r}+J${r}`}, N2); celda(wv, `N${r}`, {formula:`H${r}+K${r}`}, N2); celda(wv, `O${r}`, {formula:`IF(F${r}=0,0,ROUND(N${r}/F${r},4))`}, P4);
     celda(wv, `P${r}`, {formula:`D${r}-M${r}`}, N2); celda(wv, `Q${r}`, {formula:`F${r}-N${r}`}, N2); celda(wv, `R${r}`, {formula:`IF(F${r}=0,0,ROUND(Q${r}/F${r},4))`}, P4);
     r++; });
-  capFilas.forEach(({r:rc, it}) => { const hijos = S.partidas.filter(x => x.item.startsWith(it + ".")).map(x => filaVal[x.item]);
+  capFilas.forEach(({r:rc, it}) => { const hijos = partidasDoc.filter(x => x.item.startsWith(it + ".")).map(x => filaVal[x.item]);
     ["F","H","K","N","Q"].forEach(c => celda(wv, `${c}${rc}`, {formula:`ROUND(${hijos.map(h => `${c}${h}`).join("+")},2)`}, N2, {font:{bold:true}, fill:CLARO}));
     ["I","L","O","R"].forEach((c,i) => celda(wv, `${c}${rc}`, {formula:`IF(F${rc}=0,0,ROUND(${["H","K","N","Q"][i]}${rc}/F${rc},4))`}, P4, {font:{bold:true}, fill:CLARO})); });
   const hojas = Object.values(filaVal);
@@ -971,7 +1014,7 @@ async function excelValorizacion(v, descargar = true){
 
   // ---------- CURVA S
   const per = periodos(), regs = todos();
-  const evMes = p => r2(regs.filter(x => x.f >= p.desde && x.f <= p.hasta).reduce((s,x) => s + r2(x.q*pu(x.it)), 0));
+  const evMes = p => r2(regs.filter(x => x.f >= p.desde && x.f <= p.hasta).reduce((s,x) => s + r2(x.q*precioDoc(x.it)), 0));
   titulo(ws, 'CONTROL DE OBRA · CURVA "S"', `Programado: cronograma de obra · Valorizado: metrados registrados en el panel (N° ${nn} desde la hoja de valorización)`, "J");
   celda(ws, "B4", "Costo directo contratado (S/)", null, {font:{bold:true}, fill:CLARO}); celda(ws, "C4", {formula:`${VQ}!F${rCD}`}, N2, {font:{bold:true}});
   ws.mergeCells("C5:F5"); ws.mergeCells("G5:J5"); enc(ws, 5, ["N°", "Periodo", "PROGRAMADO (CD)"]); enc(ws, 5, ["VALORIZADO (CD)"], 7);
@@ -984,7 +1027,7 @@ async function excelValorizacion(v, descargar = true){
     else { celda(ws, `G${rr}`, esta ? {formula:`${VQ}!K${rCD}`} : evMes(p), N2, op); celda(ws, `H${rr}`, {formula:`IF($C$4=0,0,ROUND(G${rr}/$C$4,4))`}, P4);
       celda(ws, `I${rr}`, {formula: i ? `I${rr-1}+G${rr}` : `G${rr}`}, N2); celda(ws, `J${rr}`, {formula:`IF($C$4=0,0,ROUND(I${rr}/$C$4,4))`}, P4); }
     pa += pvm; pvArr.push(pa);
-    if(fut) evArr.push(null); else { ea += esta ? Object.entries(act).reduce((s,[it,q]) => s + r2(r2(q)*pu(it)), 0) : evMes(p); evArr.push(ea); } });
+    if(fut) evArr.push(null); else { ea += esta ? Object.entries(act).reduce((s,[it,q]) => s + r2(r2(q)*precioDoc(it)), 0) : evMes(p); evArr.push(ea); } });
   nota(ws, `B${8 + per.length}`, "Meses anteriores: metrados registrados actualmente en el panel. Mes de esta valorización: enlazado a la hoja de valorización.");
   ws.addImage(wb.addImage({base64:curvaPNG(per, pvArr, evArr), extension:"png"}), {tl:{col:0, row:9 + per.length}, ext:{width:900, height:420}});
 
@@ -995,8 +1038,8 @@ async function excelValorizacion(v, descargar = true){
   ["A5:A6","B5:B6","C5:C6","D5:D6","E5:E6","F5:F6"].forEach(m => wp.mergeCells(m));
   enc(wp, 5, ["Ítem", "Descripción", "Und.", "Metrado", "P.U. S/", "Parcial S/"]);
   perPE.forEach((p,i) => { const c0 = 7 + i*2; wp.mergeCells(5, c0, 5, c0+1); enc(wp, 5, [`${mesTxt(p.desde)} · N° ${String(p.n).padStart(2,"0")}`], c0); enc(wp, 6, ["PROGRAMADO", "EJECUTADO"], c0); });
-  const progP = (item, p) => CRONO ? r2(CRONO.actividades.reduce((s,a) => { const q = a.partidas.find(x => x.item === item); return q ? s + q.metrado * fracAct(a, p.desde, p.hasta) : s; }, 0) * pu(item)) : 0;
-  const ejeP = (item, p) => p.n === v.n ? null : r2(r2(regs.filter(x => x.it === item && x.f >= p.desde && x.f <= p.hasta).reduce((s,x) => s + x.q, 0)) * pu(item));
+  const progP = (item, p) => CRONO ? r2(CRONO.actividades.reduce((s,a) => { const q = a.partidas.find(x => x.item === item); return q ? s + q.metrado * fracAct(a, p.desde, p.hasta) : s; }, 0) * precioDoc(item)) : 0;
+  const ejeP = (item, p) => p.n === v.n ? null : r2(r2(regs.filter(x => x.it === item && x.f >= p.desde && x.f <= p.hasta).reduce((s,x) => s + x.q, 0)) * precioDoc(item));
   r = 7; const leaf = [];
   filas.forEach(f => { if(f.cap){ celda(wp, `A${r}`, f.it, null, {font:{bold:true}, fill:CLARO}); wp.mergeCells(`B${r}:${lastC}${r}`); celda(wp, `B${r}`, f.d, null, {font:{bold:true}, fill:CLARO}); r++; return; }
     const x = f.x; leaf.push(r); celda(wp, `A${r}`, x.item); celda(wp, `B${r}`, x.desc, null, {al:{wrapText:true, vertical:"middle"}}); celda(wp, `C${r}`, x.und, null, {al:{horizontal:"center"}});
@@ -1103,7 +1146,7 @@ function pControl(){
 /* ============================================================ 8 CONFIGURACIÓN */
 function pConfig(){
   const d = S.datos;
-  $("#conexion").innerHTML = `<table><tbody><tr><td>Estado</td><td>${SNAP ? "Instantánea de solo lectura (" + fmtD(SNAP.fecha) + ")" : LECTURA ? "Conectado en solo lectura" : "Conectado a Revit (los metrados se guardan en el panel)"}</td></tr>
+  $("#conexion").innerHTML = `<table><tbody><tr><td>Estado</td><td>${SNAP ? "Instantánea de solo lectura (" + fmtD(SNAP.fecha) + ")" : LECTURA ? "Conectado en solo lectura" : d.modo === "exportado" ? "Exportaciones BIM · Revit no es necesario · registros en SQLite local" : "Conectado a Revit (los metrados se guardan en el panel)"}</td></tr>
     <tr><td>Modelo</td><td>${esc(d.modelo)}</td></tr><tr><td>Elementos</td><td>${S.els.length} con datos · ${S.geo ? S.geo.elementos.length : 0} con geometría</td></tr>
     <tr><td>Parámetros por crear</td><td>${(d.parametrosFaltan||[]).join(", ") || "ninguno"}</td></tr>
     <tr><td>Presupuesto</td><td>${esc(CRONO?.fuentePresupuesto || "—")} · ${S.partidas.length} partidas · CD S/ ${nf(BAC())}</td></tr>
@@ -1232,9 +1275,9 @@ const V = (() => {
 /* ============================================================ inicio */
 $("#corte").value = hoy();
 $("#corte").addEventListener("change", pintar);
-$("#recargar").addEventListener("click", () => cargarDatos().then(() => toast("Datos actualizados desde Revit")).catch(e => estado("err", e.message)));
+$("#recargar").addEventListener("click", () => cargarDatos().then(() => toast("Datos actualizados desde la fuente")).catch(e => estado("err", e.message)));
 $("#ver").textContent = LECTURA ? "Solo lectura" : "";
-if(SNAP){ ["#fImprimir", "#csv", "#recargar"].forEach(s => $(s).hidden = true); }   // en la página publicada no se imprime ni se descarga
+if(SNAP){ ["#fImprimir", "#csv", "#recargar", '[data-pag="revision"]'].forEach(s => $(s).hidden = true); }   // instantánea sin API de revisión
 addEventListener("hashchange", () => { const p = location.hash.slice(1); if(TITULOS[p] && p !== S.pag) ir(p); });
 (async () => {
   ir(location.hash.slice(1) || ls("pag") || "inicio");
@@ -1243,8 +1286,222 @@ addEventListener("hashchange", () => { const p = location.hash.slice(1); if(TITU
     // si hoy es antes del inicio de obra, el corte por defecto es el último día con metrados registrados
     if(CRONO && hoy() < CRONO.inicio){ const ult = todos().reduce((m,r) => r.f > m ? r.f : m, ""); if(ult){ $("#corte").value = ult; pintar(); } }
     S.geo = await api("/api/geometria"); V.cargar(S.geo); pintar();
-  }catch(e){ estado("err", "Sin conexión con Revit: " + e.message);
-    $("#kpis").innerHTML = `<div class="kpi" style="grid-column:1/-1"><small>Sin conexión</small><b class="err" style="font-size:15px">${esc(e.message)}</b><span>Abre Revit con el modelo y pulsa «NEXO OBRA (NO) → Abrir panel».</span></div>`; }
+  }catch(e){ estado("err", "No se pudo cargar la fuente: " + e.message);
+    $("#kpis").innerHTML = `<div class="kpi" style="grid-column:1/-1"><small>Sin conexión</small><b class="err" style="font-size:15px">${esc(e.message)}</b><span>Inicia python nexo-ia/servidor.py y abre http://127.0.0.1:8771/; alternativamente utiliza el complemento de Revit.</span></div>`; }
+})();
+</script>
+<script>/* Revisión inteligente. Sin dependencias de red, HTML no confiable o correcciones automáticas. */
+(() => {
+  "use strict";
+  const R = {tab:"auditoria", caso:"actual", reporte:null, seleccionado:null, comparacion:null,
+    escenario:null, versiones:[], estado:null, corte:null, busy:false, run:0};
+  const root = () => $("#revisionApp");
+  const e = esc, dinero = x => "S/ " + nf(x);
+  const post = (ruta, body) => api(ruta, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  const aviso = (texto, error=false) => `<div class="ia-banner ${error ? "ia-error" : ""}">${e(texto)}</div>`;
+  function descargar(nombre, objeto){
+    const url = URL.createObjectURL(new Blob([JSON.stringify(objeto,null,2)], {type:"application/json"}));
+    const a = document.createElement("a"); a.href = url; a.download = nombre; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function tarea(boton, trabajo){
+    if(boton) boton.disabled = true;
+    const status = $("#iaStatus");
+    if(status){ status.textContent = "Procesando…"; status.setAttribute("role","status"); }
+    try{ await trabajo(); if($("#iaStatus")) $("#iaStatus").textContent = ""; }
+    catch(err){ if($("#iaStatus")) $("#iaStatus").textContent = err.message; else toast(err.message); }
+    finally{ if(boton?.isConnected) boton.disabled = false; }
+  }
+  function pintar(){
+    if(!root() || SNAP) return;
+    root().innerHTML = `
+      <div class="ia-hero"><div><div class="ia-eyebrow">BIM + evidencia + asistencia</div>
+        <h1>Revisar antes de aprobar</h1><p>Encuentra diferencias, consulta sus fuentes y prepara una decisión sustentada. Sin modificar automáticamente el presupuesto.</p></div><div class="ia-mark" aria-hidden="true">✧</div></div>
+      <div class="ia-tabs" role="tablist" aria-label="Funciones de revisión">${[
+        ["auditoria","Auditoría"],["vinculacion","Revisar asignaciones"],["versiones","Comparar versiones"],["escenario","Escenarios APU"]
+      ].map(([id,t]) => `<button class="btn" role="tab" data-iatab="${id}" aria-selected="${R.tab === id}">${t}</button>`).join("")}</div>
+      <div id="iaProvider" class="nota"></div><div id="iaStatus" class="ia-status" role="status"></div><div id="iaBody"></div>`;
+    root().querySelectorAll("[data-iatab]").forEach(b => b.onclick = () => { R.tab = b.dataset.iatab; pintar(); });
+    if(S.datos?.modo !== "exportado"){
+      $("#iaBody").innerHTML = aviso("Esta sección necesita el servidor independiente: python nexo-ia/servidor.py · http://127.0.0.1:8771/");
+      return;
+    }
+    proveedor();
+    if(R.tab === "auditoria") auditoria();
+    if(R.tab === "vinculacion") vinculacion();
+    if(R.tab === "versiones") versiones();
+    if(R.tab === "escenario") escenario();
+  }
+  async function proveedor(){
+    try{
+      R.estado ||= await api("/api/estado");
+      if(!$("#iaProvider")) return;
+      const ia = R.estado.ia;
+      $("#iaProvider").textContent = `Motor verificable disponible sin IA. ${ia.llm_configurado ? "LLM configurado: " + ia.modelo : "LLM no configurado."} · ${ia.embeddings_configurados ? "Embeddings configurados: " + ia.modelo_embeddings : "Búsqueda local TF-IDF; no es un modelo de IA."} ${ia.privacidad}`;
+    }catch(err){ if($("#iaProvider")) $("#iaProvider").textContent = err.message; }
+  }
+  function auditoria(){
+    $("#iaBody").innerHTML = `<div class="card"><div class="ia-toolbar">
+      <label>Datos a revisar<select class="inp" id="iaCaso"><option value="actual">Exportación de la obra · avances de prueba</option><option value="controlado">Caso controlado SIMULADO · no altera registros</option></select></label>
+      <button class="btn pri" id="iaAnalizar">Analizar presupuesto</button><button class="btn" id="iaExportar" disabled>Descargar evidencia JSON</button></div>
+      <div class="nota">Corte: <b>${e(fmtD(corte()))}</b>. Tolerancia modelo/presupuesto: 3 %. No se evalúan costos reales.</div></div>
+      <div id="iaReport"></div>`;
+    $("#iaCaso").value = R.caso;
+    $("#iaCaso").onchange = ev => { R.caso = ev.target.value; R.reporte = null; R.seleccionado = null; $("#iaReport").innerHTML = ""; $("#iaExportar").disabled = true; };
+    $("#iaAnalizar").onclick = ev => analizar(ev.currentTarget);
+    $("#iaExportar").onclick = () => descargar(`NEXO_revision_${R.reporte.caso}_${R.reporte.corte}.json`, R.reporte);
+    if(R.reporte && (R.caso === "controlado" || R.corte === corte())) pintarReporte();
+    else $("#iaReport").innerHTML = `<div class="ia-empty">Ejecuta la revisión. Cada hallazgo conservará su evidencia y sus límites.</div>`;
+  }
+  async function analizar(boton){
+    const caso = R.caso, fecha = corte(), run = ++R.run;
+    await tarea(boton, async () => {
+      const reporte = await api(`/api/auditoria?caso=${encodeURIComponent(caso)}&corte=${fecha}`);
+      if(run !== R.run || R.caso !== caso || R.tab !== "auditoria") return;
+      R.reporte = reporte; R.corte = fecha;
+      R.seleccionado = R.reporte.hallazgos[0]?.id;
+      pintarReporte();
+    });
+  }
+  function pintarReporte(){
+    if(!$("#iaReport") || !R.reporte) return;
+    const r = R.reporte, c = r.cobertura, s = r.resumen;
+    $("#iaExportar").disabled = false;
+    $("#iaReport").innerHTML = `${r.caso === "controlado" ? aviso(r.validacion_controlada.aviso + " Resultado del contraste: " + (r.validacion_controlada.coinciden ? "coincide con lo esperado." : "NO coincide; revisar.")) : aviso(R.estado?.aviso || "Datos académicos con avances de prueba y supuestos de presupuesto.")}
+      <div class="ia-summary">${[
+        ["Hallazgos",s.total,"No equivalen a errores confirmados"],["Inconsistencias",s.inconsistencias,"Incumplen una comprobación definida"],
+        ["Advertencias",s.advertencias,"Requieren interpretación humana"],["Excesos por partida",dinero(s.importe_excesos_partida),"Importe por revisar, no ahorro ni pérdida"]
+      ].map(([t,v,n]) => `<div class="kpi"><small>${t}</small><b>${e(v)}</b><span>${n}</span></div>`).join("")}</div>
+      <details class="card ia-coverage"><summary>Cobertura: ${c.registros_revisados} de ${c.registros_total} registros · ${c.elementos} elementos · corte ${e(fmtD(r.corte))}</summary>
+        <p>Excluidos por problemas de datos: ${c.registros_excluidos}. Posteriores al corte: ${c.registros_posteriores_al_corte}. Vínculos con f’c de material comprobado: ${c.vinculos_con_fc_comprobado}.</p>
+        <ul>${r.limites.map(l => `<li>${e(l)}</li>`).join("")}</ul></details>
+      <div class="ia-columns"><div class="card" style="padding:0"><div class="pad ia-toolbar">
+        <label>Filtrar<select class="inp" id="iaFiltro"><option value="">Todos los hallazgos</option><option value="inconsistencia">Inconsistencias</option><option value="advertencia">Advertencias</option><option value="pendientes">Pendientes de revisión</option></select></label></div>
+        <div id="iaFindings" class="ia-results"></div></div><div class="card ia-detail" id="iaDetail"></div></div>`;
+    $("#iaFiltro").onchange = listaHallazgos;
+    listaHallazgos();
+  }
+  function listaHallazgos(){
+    const filtro = $("#iaFiltro").value;
+    const hs = R.reporte.hallazgos.filter(h => !filtro || h.nivel === filtro || (filtro === "pendientes" && h.revision.estado === "Pendiente"));
+    if(!hs.some(h => h.id === R.seleccionado)) R.seleccionado = hs[0]?.id;
+    $("#iaFindings").innerHTML = hs.map(h => `<button class="ia-finding" data-hallazgo="${h.id}" aria-pressed="${h.id === R.seleccionado}">
+      <div class="fila"><span class="tag ${h.nivel === "inconsistencia" ? "bad" : "warn"}">${h.nivel === "inconsistencia" ? "Inconsistencia" : "Advertencia"}</span><span class="tag">${e(h.revision.estado)}</span></div>
+      <strong>${e(h.titulo)}</strong><small>${e(h.item || "Sin partida")} · ${h.element_ids.length} elementos${h.importe !== null ? " · " + dinero(h.importe) + " por revisar" : ""}</small></button>`).join("") || `<div class="ia-empty">Sin hallazgos para este filtro. No implica ausencia de problemas fuera de la cobertura.</div>`;
+    $("#iaFindings").querySelectorAll("[data-hallazgo]").forEach(b => b.onclick = () => { R.seleccionado = b.dataset.hallazgo; listaHallazgos(); });
+    detalleHallazgo();
+  }
+  function detalleHallazgo(){
+    const h = R.reporte.hallazgos.find(h => h.id === R.seleccionado);
+    const box = $("#iaDetail");
+    if(!h){ box.innerHTML = `<div class="ia-empty">Selecciona un hallazgo para examinarlo.</div>`; return; }
+    box.innerHTML = `<div class="ia-eyebrow">${e(h.motor)} · ${e(h.id)}</div><h2>${e(h.titulo)}</h2>
+      <p>${e(h.detalle)}</p><h3>Propuesta de revisión</h3><p>${e(h.accion)}</p>
+      ${h.importe !== null ? aviso("Importe asociado: " + dinero(h.importe) + ". No se suman otra vez los detalles del mismo exceso.") : ""}
+      <div class="fila"><button class="btn" id="iaVer3d" ${h.element_ids.length ? "" : "disabled"}>Ver elementos en 3D</button>
+      <button class="btn" id="iaExplicar">${R.estado?.ia.llm_configurado ? "Preparar explicación con IA" : "Explicación del motor (sin IA)"}</button></div>
+      <div id="iaExplanation"></div><h3 style="margin-top:18px">Evidencia calculada</h3><pre>${e(JSON.stringify(h.evidencia,null,2))}</pre>
+      <details><summary>Archivos de referencia</summary><pre>${e(JSON.stringify(R.reporte.fuentes,null,2))}</pre></details>
+      <h3 style="margin-top:18px">Decisión del revisor local</h3><p class="nota">Confirmar el hallazgo no modifica cantidades ni aprueba pagos. No hay autenticación multiusuario en este prototipo.</p>
+      <textarea class="inp" id="iaMotivo" aria-label="Motivo de revisión" maxlength="2000" placeholder="Indica qué contrastaste y por qué…">${e(h.revision.motivo || "")}</textarea>
+      <div class="fila">${["Confirmado","Descartado","Pendiente"].map(t => `<button class="btn" data-revision="${t}" ${LECTURA ? "disabled" : ""}>${t}</button>`).join("")}</div>`;
+    const contexto = {hallazgo:h.id, caso:R.reporte.caso, corte:R.reporte.corte};
+    $("#iaVer3d").onclick = () => { ir("visor"); resaltar(h.element_ids, (R.caso === "controlado" ? "SIMULADO: " : "") + h.titulo); };
+    $("#iaExplicar").onclick = ev => tarea(ev.currentTarget, async () => {
+      if(R.estado?.ia.llm_configurado && !await dialogo("<h2>¿Enviar este hallazgo al proveedor de IA?</h2><p>Se enviarán el hallazgo seleccionado y su evidencia. No se envía la geometría ni el archivo completo.</p>", [["Cancelar",false],["Enviar",true,"pri"]])) return;
+      const r = await post("/api/explicar",contexto);
+      if(R.seleccionado === h.id && $("#iaExplanation")) $("#iaExplanation").innerHTML = aviso(r.advertencia) + `<p>${e(r.texto)}</p><p><b>Revisión propuesta:</b> ${e(r.accion)}</p><small>Cita: ${e(r.citas.join(", "))}</small>`;
+    });
+    box.querySelectorAll("[data-revision]").forEach(b => b.onclick = () => tarea(b, async () => {
+      const r = await post("/api/revision",{...contexto, estado:b.dataset.revision, motivo:$("#iaMotivo").value});
+      h.revision = r; listaHallazgos(); toast("Revisión guardada en SQLite; presupuesto sin cambios.");
+    }));
+  }
+  function vinculacion(){
+    $("#iaBody").innerHTML = `<div class="card"><h3>Buscar partidas compatibles</h3>
+      <p>Solo se utilizan tipo/categoría disponible, familia, material, clase y unidad. No se exige clima, cuadrillas ni horas.</p>
+      <div class="ia-toolbar"><label>Elemento<input class="inp" id="iaElemento" type="number" list="iaElementos" value="${e(S.selEl || S.els[0]?.id || "")}"></label>
+      <datalist id="iaElementos">${S.els.map(el => `<option value="${el.id}">${e(el.tipo)}</option>`).join("")}</datalist>
+      <label>Qué medir<select class="inp" id="iaClase"><option value="concreto">Concreto · m³</option><option value="encofrado">Encofrado · m²</option><option value="acero">Acero · kg</option><option value="ladrillo">Ladrillo · und</option></select></label>
+      <label><span>Algoritmo</span><select class="inp" id="iaAlgoritmo"><option value="local">TF-IDF local · sin IA</option><option value="ia">Embeddings de IA · requiere proveedor</option></select></label>
+      <button class="btn pri" id="iaSugerir">Proponer candidatas</button></div><div id="iaSuggestions"></div></div>`;
+    $("#iaSugerir").onclick = ev => tarea(ev.currentTarget, async () => {
+      const usar = $("#iaAlgoritmo").value === "ia";
+      if(usar && !await dialogo("<h2>¿Usar embeddings del proveedor?</h2><p>Se enviarán la descripción del elemento y las descripciones de partidas candidatas, no el archivo completo.</p>", [["Cancelar",false],["Enviar",true,"pri"]])) return;
+      const r = await post("/api/sugerencias",{element_id:Number($("#iaElemento").value), clase:$("#iaClase").value, usar_ia:usar});
+      if(!$("#iaSuggestions")) return;
+      $("#iaSuggestions").innerHTML = aviso(r.algoritmo + ". " + r.limite) + `
+        <p>Restricciones: unidad <b>${e(r.restricciones.unidad)}</b>; f’c material <b>${e(r.restricciones.fc_material ?? "no disponible")}</b>. Asignaciones actuales: ${e(r.actuales.join(", ") || "ninguna")}.</p>
+        ${r.aviso ? aviso(r.aviso) : ""}<div class="ia-scroll"><table class="ia-table"><thead><tr><th>Candidata</th><th>Unidad</th><th class="n">Similitud</th><th class="n">PU</th></tr></thead><tbody>
+        ${r.candidatas.map(p => `<tr><td><b>${e(p.item)}</b><small>${e(p.desc)}</small></td><td>${e(p.und)}</td><td class="n">${nf(p.similitud,3)}</td><td class="n">${dinero(p.pu)}</td></tr>`).join("")}</tbody></table></div>
+        <p class="nota">Propuestas para contrastar; no se cambia la asignación del modelo ni del presupuesto.</p>`;
+    });
+  }
+  async function cargarVersiones(){
+    if(!R.versiones.length) R.versiones = (await api("/api/versiones")).versiones;
+  }
+  const opciones = seleccion => R.versiones.map(v => `<option value="${e(v.id)}" ${v.id === seleccion ? "selected" : ""}>${e(v.nombre)}</option>`).join("");
+  function versiones(){
+    $("#iaBody").innerHTML = `<div class="card"><h3>Variaciones verificables entre presupuestos</h3><div id="iaVersionControls">Cargando versiones…</div><div id="iaComparison"></div></div>`;
+    tarea(null, async () => {
+      await cargarVersiones(); if(!$("#iaVersionControls")) return;
+      $("#iaVersionControls").innerHTML = `<div class="ia-toolbar"><label>Base<select class="inp" id="iaBase">${opciones("v3")}</select></label>
+        <label>Nueva<select class="inp" id="iaNueva">${opciones("v4")}</select></label><button class="btn pri" id="iaComparar">Comparar y explicar</button></div>
+        <p class="nota">Se leen las versiones existentes, sin subir archivos ni editar el presupuesto activo.</p>`;
+      $("#iaComparar").onclick = ev => tarea(ev.currentTarget, async () => {
+        R.comparacion = await api(`/api/comparacion?a=${encodeURIComponent($("#iaBase").value)}&b=${encodeURIComponent($("#iaNueva").value)}`);
+        if($("#iaComparison")) pintarComparacion($("#iaComparison"),R.comparacion);
+      });
+      if(R.comparacion) pintarComparacion($("#iaComparison"),R.comparacion);
+    });
+  }
+  function pintarComparacion(box,r){
+    const t = r.totales, filas = [...r.filas].filter(f => f.tipo !== "Sin cambio").sort((a,b) => Math.abs(b.delta)-Math.abs(a.delta));
+    const componentes = [["Cantidad",t.cantidad],["Precio",t.precio],["Altas",t.altas],["Bajas",t.bajas],["Unidades distintas",t.no_comparable],["Redondeo",t.redondeo]];
+    box.innerHTML = aviso(`${r.reconciliado ? "Descomposición reconciliada al céntimo." : "ATENCIÓN: no reconciliado."} ${r.limite}`) +
+      `<div class="ia-summary">${[["Costo directo base",t.base],["Costo directo nuevo",t.nueva],["Variación",r.delta]].map(([n,v]) => `<div class="kpi"><small>${n}</small><b>${dinero(v)}</b></div>`).join("")}</div>
+      <p>Explicación del motor, no de un LLM: ${componentes.filter(([,v]) => v !== 0).map(([n,v]) => `${n.toLowerCase()}: ${dinero(v)}`).join(" · ") || "sin variación monetaria"}.</p>
+      <p class="nota">${e(r.metodo)} ${e(r.supuesto || "")}</p><div class="ia-scroll"><table class="ia-table"><thead><tr><th>Partida / fuente</th><th>Tipo</th><th class="n">Q base → nueva</th><th class="n">PU base → nuevo</th><th class="n">Cantidad</th><th class="n">Precio</th><th class="n">Δ costo directo</th></tr></thead><tbody>
+      ${filas.map(f => `<tr><td><b>${e(f.item)}</b><small>${e(f.desc)}</small><details><summary>Evidencia</summary><small>${e(f.a?.fuente || "No existía")}<br>${e(f.b?.fuente || "Retirada")}</small></details></td>
+      <td>${e(f.tipo)}</td><td class="n">${f.a ? nf(f.a.metrado) + " " + e(f.a.und) : "—"} → ${f.b ? nf(f.b.metrado) + " " + e(f.b.und) : "—"}</td>
+      <td class="n">${f.a ? nf(f.a.pu) : "—"} → ${f.b ? nf(f.b.pu) : "—"}</td><td class="n">${dinero(f.cantidad)}</td><td class="n">${dinero(f.precio)}</td><td class="n">${dinero(f.delta)}</td></tr>`).join("") || `<tr><td colspan="7">Sin cambios de importe, descripción o unidad.</td></tr>`}</tbody></table></div>
+      <details class="ia-coverage"><summary>Versiones y huellas de origen</summary><pre>${e(JSON.stringify({base:r.a,nueva:r.b},null,2))}</pre></details><button class="btn" data-export-comparison>Descargar comparación JSON</button>`;
+    box.querySelector("[data-export-comparison]").onclick = () => descargar("NEXO_comparacion_costos.json",r);
+  }
+  function escenario(){
+    $("#iaBody").innerHTML = `<div class="card"><h3>Escenario de precio de un material</h3>
+      <p>No es una predicción. Recalcula el efecto en las partidas que consumen el material mediante el APU existente.</p>
+      <div id="iaScenarioControls">Cargando materiales…</div><div id="iaScenario"></div></div>`;
+    tarea(null, async () => {
+      const r = await api("/api/recursos?version=v4");
+      if(!$("#iaScenarioControls")) return;
+      $("#iaScenarioControls").innerHTML = `<div class="ia-toolbar"><label style="flex:1">Describe el escenario<input class="inp" id="iaSolicitud" maxlength="600" placeholder="El precio del acero sube 5 %"></label>
+        <label>Interpretación<select class="inp" id="iaInterpretacion"><option value="local">Reglas locales · sin IA</option><option value="ia">Modelo de lenguaje IA</option></select></label>
+        <button class="btn" id="iaInterpretar">Preparar propuesta</button></div><div id="iaProposal"></div>
+        <hr style="border:0;border-top:1px solid var(--bd);margin:16px 0">
+        <div class="ia-toolbar"><label>Material · presupuesto v4<select class="inp" id="iaRecurso">${r.recursos.map(p => `<option value="${e(p.codigo)}" ${p.codigo === "0203020003" ? "selected" : ""}>${e(p.desc)} · ${e(p.und)}</option>`).join("")}</select></label>
+        <label>Variación del precio %<input class="inp" id="iaPorcentaje" type="number" min="-100" max="100" step="any" value="5"></label>
+        <button class="btn pri" id="iaSimular">Confirmar supuesto y simular</button></div>
+        <p class="nota">La confirmación crea solo una vista de escenario, nunca cambia el presupuesto ni los registros.</p>`;
+      $("#iaInterpretar").onclick = ev => tarea(ev.currentTarget, async () => {
+        const usar = $("#iaInterpretacion").value === "ia", texto = $("#iaSolicitud").value;
+        if(usar && !await dialogo("<h2>¿Enviar solicitud al proveedor de IA?</h2><p>Se enviarán tu solicitud y las descripciones del catálogo de materiales. Después deberás confirmar los parámetros propuestos.</p>", [["Cancelar",false],["Enviar",true,"pri"]])) return;
+        const propuesta = await post("/api/escenario/propuesta",{version:"v4",texto,usar_ia:usar});
+        if(!$("#iaProposal")) return;
+        $("#iaRecurso").value = propuesta.codigo; $("#iaPorcentaje").value = propuesta.porcentaje;
+        $("#iaProposal").innerHTML = aviso(`${propuesta.modo}: ${propuesta.descripcion} · ${propuesta.porcentaje} %. ${propuesta.aviso}`);
+      });
+      $("#iaSimular").onclick = ev => tarea(ev.currentTarget, async () => {
+        const codigo = $("#iaRecurso").value, porcentaje = $("#iaPorcentaje").value, recurso = r.recursos.find(p => p.codigo === codigo);
+        if(!await dialogo(`<h2>Confirmar escenario</h2><p>Material: ${e(recurso.desc)}. Variación propuesta: <b>${e(porcentaje)} %</b>.</p><p>Se mantienen cantidades y rendimientos. Solo se calcula costo directo; el original queda intacto.</p>`,[["Cancelar",false],["Simular",true,"pri"]])) return;
+        R.escenario = await post("/api/escenario",{version:"v4",codigo,porcentaje});
+        if($("#iaScenario")) pintarComparacion($("#iaScenario"),R.escenario);
+      });
+      if(R.escenario) pintarComparacion($("#iaScenario"),R.escenario);
+    });
+  }
+  window.NexoRevision = {pintar};
+  if(S.pag === "revision" && S.datos) pintar();
 })();
 </script>
 </body>

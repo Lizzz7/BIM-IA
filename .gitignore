@@ -20,3 +20,7 @@ NEXO OBRASS/
 Thumbs.db
 desktop.ini
 .env
+
+# Estado local del prototipo (no modifica los datos BIM de referencia)
+.nexo-local/
+*.sqlite3

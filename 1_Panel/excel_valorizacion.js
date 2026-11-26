@@ -26,7 +26,9 @@ async function excelValorizacion(v, descargar = true){
   if(!v) return; await cargarExcelJS(); toast("Generando el Excel…");
   const NAVY = "FF101827", NAVY2 = "FF1C2840", GOLD = "FFE5B869", CLARO = "FFF3F5F9", BORDE = "FFB8C2D3", TX = "FF0F172A", MES = "FFFFF7E6", AZUL = "FF1D4ED8";
   const wb = new ExcelJS.Workbook(); wb.creator = "NEXO OBRA (NO)"; wb.calcProperties.fullCalcOnLoad = true;
-  const pie = S.datos.pie, cab = v.cab, N2 = '#,##0.00;-#,##0.00;"-"', P4 = '0.00%;-0.00%;"-"', nn = String(v.n).padStart(2,"0");
+  const pre = presupuestoVz(v), partidasDoc = pre.partidas, preciosDoc = Object.fromEntries(partidasDoc.map(p => [p.item,p.pu]));
+  const precioDoc = it => preciosDoc[it] || 0;
+  const pie = pre.pie, cab = v.cab, N2 = '#,##0.00;-#,##0.00;"-"', P4 = '0.00%;-0.00%;"-"', nn = String(v.n).padStart(2,"0");
   const periodoTxt = `del ${fmtD(v.desde)} al ${fmtD(v.hasta)}`, obra = cab.obra || S.datos.modelo + " · casco estructural";
   const fino = {style:"thin", color:{argb:BORDE}}, caja = {top:fino, left:fino, bottom:fino, right:fino};
   const hoja = (nombre, ancho) => { const ws = wb.addWorksheet(nombre, {views:[{showGridLines:false}],
@@ -52,8 +54,8 @@ async function excelValorizacion(v, descargar = true){
   const ws = hoja("D.02 CURVA S", [8, 40, 15, 9, 15, 9, 15, 9, 15, 9]), wp = hoja("D.03 PROGRAMADO VS EJECUTADO");
   const VQ = "'D.02 VALORIZACION MENSUAL'", DQ = "'D.01 METRADOS DIARIOS'", RQ = "'D.02 RESUMEN VALORIZACION'";
 
-  const filas = [...Object.entries(S.datos.capitulos).map(([it, d]) => ({it, d, cap:true})), ...S.partidas.map(x => ({it:x.item, x}))]
-    .filter(f => !f.cap || S.partidas.some(x => x.item.startsWith(f.it + "."))).sort((a,b) => a.it.localeCompare(b.it, "es", {numeric:true}));
+  const filas = [...Object.entries(pre.capitulos).map(([it, d]) => ({it, d, cap:true})), ...partidasDoc.map(x => ({it:x.item, x}))]
+    .filter(f => !f.cap || partidasDoc.some(x => x.item.startsWith(f.it + "."))).sort((a,b) => a.it.localeCompare(b.it, "es", {numeric:true}));
   const ant = v.ant, act = v.act;
 
   // ---------- METRADOS DIARIOS
@@ -91,7 +93,7 @@ async function excelValorizacion(v, descargar = true){
     celda(wv, `M${r}`, {formula:`G${r}+J${r}`}, N2); celda(wv, `N${r}`, {formula:`H${r}+K${r}`}, N2); celda(wv, `O${r}`, {formula:`IF(F${r}=0,0,ROUND(N${r}/F${r},4))`}, P4);
     celda(wv, `P${r}`, {formula:`D${r}-M${r}`}, N2); celda(wv, `Q${r}`, {formula:`F${r}-N${r}`}, N2); celda(wv, `R${r}`, {formula:`IF(F${r}=0,0,ROUND(Q${r}/F${r},4))`}, P4);
     r++; });
-  capFilas.forEach(({r:rc, it}) => { const hijos = S.partidas.filter(x => x.item.startsWith(it + ".")).map(x => filaVal[x.item]);
+  capFilas.forEach(({r:rc, it}) => { const hijos = partidasDoc.filter(x => x.item.startsWith(it + ".")).map(x => filaVal[x.item]);
     ["F","H","K","N","Q"].forEach(c => celda(wv, `${c}${rc}`, {formula:`ROUND(${hijos.map(h => `${c}${h}`).join("+")},2)`}, N2, {font:{bold:true}, fill:CLARO}));
     ["I","L","O","R"].forEach((c,i) => celda(wv, `${c}${rc}`, {formula:`IF(F${rc}=0,0,ROUND(${["H","K","N","Q"][i]}${rc}/F${rc},4))`}, P4, {font:{bold:true}, fill:CLARO})); });
   const hojas = Object.values(filaVal);
@@ -144,7 +146,7 @@ async function excelValorizacion(v, descargar = true){
 
   // ---------- CURVA S
   const per = periodos(), regs = todos();
-  const evMes = p => r2(regs.filter(x => x.f >= p.desde && x.f <= p.hasta).reduce((s,x) => s + r2(x.q*pu(x.it)), 0));
+  const evMes = p => r2(regs.filter(x => x.f >= p.desde && x.f <= p.hasta).reduce((s,x) => s + r2(x.q*precioDoc(x.it)), 0));
   titulo(ws, 'CONTROL DE OBRA · CURVA "S"', `Programado: cronograma de obra · Valorizado: metrados registrados en el panel (N° ${nn} desde la hoja de valorización)`, "J");
   celda(ws, "B4", "Costo directo contratado (S/)", null, {font:{bold:true}, fill:CLARO}); celda(ws, "C4", {formula:`${VQ}!F${rCD}`}, N2, {font:{bold:true}});
   ws.mergeCells("C5:F5"); ws.mergeCells("G5:J5"); enc(ws, 5, ["N°", "Periodo", "PROGRAMADO (CD)"]); enc(ws, 5, ["VALORIZADO (CD)"], 7);
@@ -157,7 +159,7 @@ async function excelValorizacion(v, descargar = true){
     else { celda(ws, `G${rr}`, esta ? {formula:`${VQ}!K${rCD}`} : evMes(p), N2, op); celda(ws, `H${rr}`, {formula:`IF($C$4=0,0,ROUND(G${rr}/$C$4,4))`}, P4);
       celda(ws, `I${rr}`, {formula: i ? `I${rr-1}+G${rr}` : `G${rr}`}, N2); celda(ws, `J${rr}`, {formula:`IF($C$4=0,0,ROUND(I${rr}/$C$4,4))`}, P4); }
     pa += pvm; pvArr.push(pa);
-    if(fut) evArr.push(null); else { ea += esta ? Object.entries(act).reduce((s,[it,q]) => s + r2(r2(q)*pu(it)), 0) : evMes(p); evArr.push(ea); } });
+    if(fut) evArr.push(null); else { ea += esta ? Object.entries(act).reduce((s,[it,q]) => s + r2(r2(q)*precioDoc(it)), 0) : evMes(p); evArr.push(ea); } });
   nota(ws, `B${8 + per.length}`, "Meses anteriores: metrados registrados actualmente en el panel. Mes de esta valorización: enlazado a la hoja de valorización.");
   ws.addImage(wb.addImage({base64:curvaPNG(per, pvArr, evArr), extension:"png"}), {tl:{col:0, row:9 + per.length}, ext:{width:900, height:420}});
 
@@ -168,8 +170,8 @@ async function excelValorizacion(v, descargar = true){
   ["A5:A6","B5:B6","C5:C6","D5:D6","E5:E6","F5:F6"].forEach(m => wp.mergeCells(m));
   enc(wp, 5, ["Ítem", "Descripción", "Und.", "Metrado", "P.U. S/", "Parcial S/"]);
   perPE.forEach((p,i) => { const c0 = 7 + i*2; wp.mergeCells(5, c0, 5, c0+1); enc(wp, 5, [`${mesTxt(p.desde)} · N° ${String(p.n).padStart(2,"0")}`], c0); enc(wp, 6, ["PROGRAMADO", "EJECUTADO"], c0); });
-  const progP = (item, p) => CRONO ? r2(CRONO.actividades.reduce((s,a) => { const q = a.partidas.find(x => x.item === item); return q ? s + q.metrado * fracAct(a, p.desde, p.hasta) : s; }, 0) * pu(item)) : 0;
-  const ejeP = (item, p) => p.n === v.n ? null : r2(r2(regs.filter(x => x.it === item && x.f >= p.desde && x.f <= p.hasta).reduce((s,x) => s + x.q, 0)) * pu(item));
+  const progP = (item, p) => CRONO ? r2(CRONO.actividades.reduce((s,a) => { const q = a.partidas.find(x => x.item === item); return q ? s + q.metrado * fracAct(a, p.desde, p.hasta) : s; }, 0) * precioDoc(item)) : 0;
+  const ejeP = (item, p) => p.n === v.n ? null : r2(r2(regs.filter(x => x.it === item && x.f >= p.desde && x.f <= p.hasta).reduce((s,x) => s + x.q, 0)) * precioDoc(item));
   r = 7; const leaf = [];
   filas.forEach(f => { if(f.cap){ celda(wp, `A${r}`, f.it, null, {font:{bold:true}, fill:CLARO}); wp.mergeCells(`B${r}:${lastC}${r}`); celda(wp, `B${r}`, f.d, null, {font:{bold:true}, fill:CLARO}); r++; return; }
     const x = f.x; leaf.push(r); celda(wp, `A${r}`, x.item); celda(wp, `B${r}`, x.desc, null, {al:{wrapText:true, vertical:"middle"}}); celda(wp, `C${r}`, x.und, null, {al:{horizontal:"center"}});

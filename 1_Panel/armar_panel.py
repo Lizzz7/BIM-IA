@@ -46,6 +46,8 @@ lib = (AQUI / "lib" / "exceljs.min.js").read_text(encoding="utf-8").replace("</s
 assert "<!--__EXCELJS__-->" in html, "falta la marca de la librería ExcelJS"
 html = html.replace("<!--__EXCELJS__-->", "<script>" + lib + "</script>")
 html = html.replace("/*__EXCEL__*/", (AQUI / "excel_valorizacion.js").read_text(encoding="utf-8"))
+html = html.replace("<!--__REVISION_CSS__-->", "<style>" + (AQUI / "revision_ia.css").read_text(encoding="utf-8") + "</style>")
+html = html.replace("<!--__REVISION_JS__-->", "<script>" + (AQUI / "revision_ia.js").read_text(encoding="utf-8").replace("</script", "<\\/script") + "</script>")
 (AQUI / "index.html").write_text(html, encoding="utf-8")
 print(f"index.html listo: {len(datos['actividades'])} actividades, {len(datos['elementos'])} elementos, "
       f"{len(recursos)} materiales, {len(html) // 1024} KB")
