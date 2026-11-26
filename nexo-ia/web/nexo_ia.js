@@ -248,6 +248,8 @@
         <button class="btn sm pri" id="iaDronSubir">✦ Procesar nube</button>
         <button class="btn sm" id="iaDronDemo" title="Genera una nube desde el modelo con verdad conocida (avance según cronograma, atrasos y 2 registros falsos sembrados)">Probar con nube sintética</button></div>
       <div class="nota" style="margin:6px 0 0">Nube de WebODM (.laz/.ply) o exportada de ReCap (.pts/.ply), en coordenadas del modelo (puntos de control en ejes del proyecto). El sistema la alinea (ICP), mide cada elemento y propone el metrado; nada se registra sin tu confirmación.</div>
+      <div class="fila" style="margin:8px 0 0"><button class="btn sm" id="iaDronVer" hidden>Ver la nube de puntos en 3D</button></div>
+      <div id="iaNube"></div>
       <div id="iaDronRes"></div>`, ".grid");
     if (!box) return;
     if (!box.dataset.listo) {
@@ -255,6 +257,7 @@
       $q("#iaDronFecha").value = (window.S && S.diaSel) || corte();
       $q("#iaDronSubir").onclick = subirNube;
       $q("#iaDronDemo").onclick = demoNube;
+      $q("#iaDronVer").onclick = abrirVisorNube;
       if (!IA.dron) pide("/api/ia/escaneo").then(r => { if (!r.vacio) { IA.dron = r; pintarResultadoDron(); } }).catch(() => {});
     }
     if (IA.dron) pintarResultadoDron();
@@ -266,22 +269,23 @@
     try {
       const r = await fetch(`/api/ia/escaneo/subir?fecha=${encodeURIComponent($q("#iaDronFecha").value)}&nombre=${encodeURIComponent(f.name)}`, {method: "POST", body: f});
       const j = await r.json(); if (!r.ok || j.ok === false) throw new Error(j.error || "HTTP " + r.status);
-      IA.dron = j; IA.dronSim = null; pintarResultadoDron();
+      cerrarNube(); IA.dron = j; IA.dronSim = null; pintarResultadoDron();
     } catch (err) { $q("#iaDronRes").innerHTML = `<div class="vacio">${e_(err.message)}</div>`; }
   }
   async function demoNube() {
     $q("#iaDronRes").innerHTML = '<div class="vacio">Generando la nube sintética desde el modelo y comparándola (≈20 s)…</div>';
-    try { IA.dron = await pide("/api/ia/escaneo/demo", {fecha: $q("#iaDronFecha").value}); IA.dronSim = null; pintarResultadoDron(); }
+    try { cerrarNube(); IA.dron = await pide("/api/ia/escaneo/demo", {fecha: $q("#iaDronFecha").value}); IA.dronSim = null; pintarResultadoDron(); }
     catch (err) { $q("#iaDronRes").innerHTML = `<div class="vacio">${e_(err.message)}</div>`; }
   }
 
   function pintarResultadoDron() {
     const d = IA.dron, sim = IA.dronSim; if (!d || !$q("#iaDronRes")) return;
+    $q("#iaDronVer").hidden = !d.vista;
     const a = d.avance, al = d.alineacion || {}, inc = !!IA.dronInf;
     $q("#iaDronMeta").innerHTML = `${e_(d.nombre)} · ${num(d.parametros.puntos_nube, 0)} puntos · ${num(d.segundos, 1)} s · datos v.${e_(d.version_datos)}`;
     let h = `<div class="ia-chips"><div class="ia-chip on"><b>${num(a.total.avance_pct, 1)} %</b><span>avance físico (${num(a.total.construido_m3, 1)} de ${num(a.total.total_m3, 1)} m³ de concreto)</span></div>` +
       Object.entries(EST).map(([k, [t]]) => `<div class="ia-chip" data-est="${k}"><b>${a.conteo[k]}</b><span>${t}</span></div>`).join("") + `</div>`;
-    h += `<div class="ia-kv"><div>Alineación ICP</div><div>${al.aplicada ? `desplazamiento ${al.traslacion_m.map(x => num(x, 3)).join(" / ")} m · giro ${num(al.giro_z_grados, 2)}° · residuo ${num(al.rmse_m * 100, 1)} cm` : "sin alinear"}</div>
+    h += `<div class="ia-kv"><div>Alineación ICP</div><div>${al.aplicada ? `desplazamiento ${al.traslacion_m.map(x => num(x, 3)).join(" / ")} m · giro ${num(al.giro_z_grados, 2)}° · residuo ${num(al.rmse_m * 100, 1)} cm · ${num(al.fraccion_emparejada * 100, 0)} % de puntos emparejados${al.aviso ? ` <span class="ia-mal">⚠ ${e_(al.aviso)}</span>` : ""}` : "sin alinear"}</div>
       <div>Criterio</div><div>construido si ≥ ${num(d.parametros.cobertura_construido * 100, 0)} % de su parte visible tiene puntos a &lt; ${num(d.parametros.tolerancia_m * 100, 0)} cm; no se juzga lo que el dron no puede ver (&lt; ${num(d.parametros.min_fraccion_visible * 100, 0)} % visible)</div></div>`;
     if (d.metricas) {
       const m = d.metricas, x = m.alertas_valorizacion || {}, ea = m.error_alineacion || {};
@@ -322,6 +326,141 @@
         IA.dronSim = null; IA.aud = null; d.registros = []; d.registros_inferidos = []; d.resumen = []; d.resumen_inferidos = []; d.monto_total = d.monto_inferidos = 0;
         pintarResultadoDron(); aviso(`Registrado: ${r.aplicados.length} valores desde el vuelo`); S.diaSel = d.fecha; await cargarDatos(); }
       catch (err) { alert("No se pudo registrar: " + err.message); } };
+  }
+
+  /* ================================================================ VISOR DE LA NUBE (puntos del dron sobre el modelo) */
+  const COL_EST = [[0.09, 0.64, 0.29], [0.13, 0.62, 0.72], [0.96, 0.62, 0.04], [0.86, 0.15, 0.15], [0.55, 0.6, 0.7], [0.85, 0.2, 0.85]];
+  const NUBE = (() => {
+    let cv, gl, pP, pM, bufs = {}, n = 0, rangos = [], cam = {th: -0.9, ph: 0.5, d: 60, t: [0, 0, 0]}, radio = 30, cfg = {modo: "rgb", malla: true, nube: true, tam: 2, zmax: 1e9}, colEl = {}, zr = [0, 1];
+    const VS_P = `attribute vec3 p; attribute vec3 c; uniform mat4 mvp; uniform float sz; uniform float zmax; varying vec3 vc;
+      void main(){ vc = c; gl_PointSize = sz; gl_Position = p.z > zmax ? vec4(2.0,2.0,2.0,1.0) : mvp * vec4(p,1.0); }`;
+    const FS_P = `precision mediump float; varying vec3 vc; void main(){ gl_FragColor = vec4(vc,1.0); }`;
+    const VS_M = `attribute vec3 p; attribute vec3 n; uniform mat4 mvp; uniform vec3 luz; varying float l; varying float z;
+      void main(){ gl_Position = mvp * vec4(p,1.0); l = 0.5 + 0.5*abs(dot(normalize(n), luz)); z = p.z; }`;
+    const FS_M = `precision mediump float; uniform vec4 col; uniform float zmax; varying float l; varying float z;
+      void main(){ if(z > zmax) discard; gl_FragColor = vec4(col.rgb*l, col.a); }`;
+    function prog(v, f) { const sh = (t, s) => { const x = gl.createShader(t); gl.shaderSource(x, s); gl.compileShader(x); return x; };
+      const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, v)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, f)); gl.linkProgram(p); return p; }
+    function persp(f, a, nn, l) { const t = 1 / Math.tan(f / 2); return [t / a, 0, 0, 0, 0, t, 0, 0, 0, 0, (l + nn) / (nn - l), -1, 0, 0, 2 * l * nn / (nn - l), 0]; }
+    function mul(a, b) { const r = new Array(16); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; r[i * 4 + j] = s; } return r; }
+    function mira(e, t) { let z = [e[0] - t[0], e[1] - t[1], e[2] - t[2]]; let L = Math.hypot(...z); z = z.map(x => x / L); let x = [-z[1], z[0], 0]; L = Math.hypot(...x) || 1; x = x.map(v => v / L);
+      const y = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]];
+      return [x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -(x[0] * e[0] + x[1] * e[1] + x[2] * e[2]), -(y[0] * e[0] + y[1] * e[1] + y[2] * e[2]), -(z[0] * e[0] + z[1] * e[1] + z[2] * e[2]), 1]; }
+    const ojo = () => [cam.t[0] + cam.d * Math.cos(cam.ph) * Math.cos(cam.th), cam.t[1] + cam.d * Math.cos(cam.ph) * Math.sin(cam.th), cam.t[2] + cam.d * Math.sin(cam.ph)];
+    function buf(datos) { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, datos, gl.STATIC_DRAW); return b; }
+    function montar(contenedor) {
+      if (!cv) {
+        cv = document.createElement("canvas"); cv.style.cssText = "width:100%;height:100%;display:block;touch-action:none;cursor:grab";
+        gl = cv.getContext("webgl", {antialias: true}); if (!gl) return false;
+        pP = prog(VS_P, FS_P); pM = prog(VS_M, FS_M);
+        let arr = null;
+        cv.addEventListener("contextmenu", e => e.preventDefault());
+        cv.addEventListener("pointerdown", e => { arr = {x: e.clientX, y: e.clientY, b: e.button, sh: e.shiftKey}; cv.setPointerCapture(e.pointerId); });
+        cv.addEventListener("pointermove", e => { if (!arr) return; const dx = e.clientX - arr.x, dy = e.clientY - arr.y; arr.x = e.clientX; arr.y = e.clientY;
+          if (arr.b === 2 || arr.sh) { const s = cam.d * 0.0016, ct = Math.cos(cam.th), st = Math.sin(cam.th), cp = Math.cos(cam.ph), sp = Math.sin(cam.ph), der = [-st, ct, 0], up = [-sp * ct, -sp * st, cp];
+            for (let i = 0; i < 3; i++) cam.t[i] += (-der[i] * dx + up[i] * dy) * s; }
+          else { cam.th -= dx * 0.008; cam.ph = Math.max(-1.5, Math.min(1.5, cam.ph + dy * 0.008)); } dibujar(); });
+        cv.addEventListener("pointerup", () => { arr = null; });
+        cv.addEventListener("wheel", e => { e.preventDefault(); cam.d = Math.max(radio * 0.03, Math.min(radio * 8, cam.d * (e.deltaY > 0 ? 1.12 : 0.89))); dibujar(); }, {passive: false});
+        addEventListener("resize", () => dibujar());
+      }
+      if (cv.parentNode !== contenedor) contenedor.prepend(cv);
+      return true;
+    }
+    function cargarMalla(geo) {
+      let tot = 0; geo.elementos.forEach(e => tot += e.v.length);
+      const P = new Float32Array(tot), N = new Float32Array(tot); let o = 0; rangos = [];
+      geo.elementos.forEach(e => { const v = e.v, ini = o / 3;
+        for (let i = 0; i < v.length; i += 9) { const ax = v[i + 3] - v[i], ay = v[i + 4] - v[i + 1], az = v[i + 5] - v[i + 2], bx = v[i + 6] - v[i], by = v[i + 7] - v[i + 1], bz = v[i + 8] - v[i + 2];
+          let nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx; const L = Math.hypot(nx, ny, nz) || 1;
+          for (let k = 0; k < 9; k += 3) { P[o] = v[i + k]; P[o + 1] = v[i + k + 1]; P[o + 2] = v[i + k + 2]; N[o] = nx / L; N[o + 1] = ny / L; N[o + 2] = nz / L; o += 3; } }
+        rangos.push({id: e.id, ini, n: o / 3 - ini}); });
+      bufs.mP = buf(P); bufs.mN = buf(N);
+    }
+    function cargarNube(ab) {
+      n = new Uint32Array(ab, 0, 1)[0];
+      const xyz = new Float32Array(ab, 4, n * 3), rgb = new Uint8Array(ab, 4 + 12 * n, n * 3), dist = new Uint8Array(ab, 4 + 15 * n, n), cod = new Uint8Array(ab, 4 + 16 * n, n);
+      const cd = new Uint8Array(n * 3), ce = new Uint8Array(n * 3);
+      const mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
+      for (let i = 0; i < n; i++) {
+        for (let c = 0; c < 3; c++) { const v = xyz[i * 3 + c]; if (v < mn[c]) mn[c] = v; if (v > mx[c]) mx[c] = v; }
+        const d = dist[i]; let r, g, b;
+        if (d === 255) { r = 217; g = 50; b = 217; } else if (d <= 4) { r = 22; g = 163; b = 74; } else if (d <= 10) { const t = (d - 4) / 6; r = 22 + t * 223; g = 163 + t * 15; b = 74 - t * 62; } else { const t = Math.min(1, (d - 10) / 40); r = 245 - t * 25; g = 158 - t * 120; b = 11 + t * 27; }
+        cd[i * 3] = r; cd[i * 3 + 1] = g; cd[i * 3 + 2] = b;
+        const k = COL_EST[cod[i]] || COL_EST[5]; ce[i * 3] = k[0] * 255; ce[i * 3 + 1] = k[1] * 255; ce[i * 3 + 2] = k[2] * 255;
+      }
+      bufs.p = buf(xyz); bufs.rgb = buf(rgb); bufs.dist = buf(cd); bufs.est = buf(ce);
+      cam.t = mn.map((a, i) => (a + mx[i]) / 2); radio = Math.hypot(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) / 2; cam.d = radio * 1.9; zr = [mn[2], mx[2]];
+      return {n, zmin: mn[2], zmax: mx[2]};
+    }
+    function colores(dron) { colEl = {}; (dron.elementos || []).forEach(f => colEl[f.id] = COL_EST[ESTADOS_ORDEN.indexOf(f.estado)] || COL_EST[4]); }
+    function dibujar() {
+      if (!cv || !gl) return; const w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return; const dpr = Math.min(2, devicePixelRatio || 1);
+      if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+      gl.viewport(0, 0, cv.width, cv.height); gl.clearColor(0.03, 0.05, 0.09, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
+      const e = ojo(), mvp = mul(persp(0.8, cv.width / Math.max(1, cv.height), Math.max(0.05, cam.d - radio * 3), cam.d + radio * 4), mira(e, cam.t));
+      if (cfg.nube && n) {
+        gl.useProgram(pP); gl.disable(gl.BLEND); gl.depthMask(true);
+        gl.uniformMatrix4fv(gl.getUniformLocation(pP, "mvp"), false, mvp); gl.uniform1f(gl.getUniformLocation(pP, "sz"), cfg.tam * dpr); gl.uniform1f(gl.getUniformLocation(pP, "zmax"), cfg.zmax);
+        const aP = gl.getAttribLocation(pP, "p"), aC = gl.getAttribLocation(pP, "c");
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufs.p); gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufs[cfg.modo]); gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
+        gl.drawArrays(gl.POINTS, 0, n); gl.disableVertexAttribArray(aC);
+      }
+      if (cfg.malla && rangos.length) {
+        gl.useProgram(pM); gl.uniformMatrix4fv(gl.getUniformLocation(pM, "mvp"), false, mvp); gl.uniform1f(gl.getUniformLocation(pM, "zmax"), cfg.zmax);
+        const lz = [e[0] - cam.t[0] + radio, e[1] - cam.t[1] - radio, e[2] - cam.t[2] + radio * 2], L = Math.hypot(...lz); gl.uniform3f(gl.getUniformLocation(pM, "luz"), lz[0] / L, lz[1] / L, lz[2] / L);
+        const aP = gl.getAttribLocation(pM, "p"), aN = gl.getAttribLocation(pM, "n");
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufs.mP); gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufs.mN); gl.enableVertexAttribArray(aN); gl.vertexAttribPointer(aN, 3, gl.FLOAT, false, 0, 0);
+        gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(!cfg.nube || !n);
+        const alfa = cfg.nube && n ? 0.28 : 0.9, uc = gl.getUniformLocation(pM, "col");
+        rangos.forEach(r => { const c = colEl[r.id] || COL_EST[4]; gl.uniform4f(uc, c[0], c[1], c[2], alfa); gl.drawArrays(gl.TRIANGLES, r.ini, r.n); });
+        gl.disableVertexAttribArray(aN); gl.depthMask(true);
+      }
+    }
+    return {montar, cargarMalla, cargarNube, colores, dibujar, cfg, zr: () => zr, listo: () => n > 0, tieneMalla: () => rangos.length > 0};
+  })();
+  const ESTADOS_ORDEN = ["construido", "inferido", "dudoso", "no_construido", "no_observable"];
+  const LEY = {
+    rgb: [["Color real de las fotos", "linear-gradient(90deg,#b8b8b4,#c9a77a,#f2c21a)"]],
+    dist: [["≤ 4 cm del modelo", "#16A34A"], ["4–10 cm", "#F5B00B"], ["> 10 cm", "#DC2626"], ["fuera del modelo (> 1 m)", "#D932D9"]],
+    est: [["Construido", "#16A34A"], ["Inferido", "#219EB8"], ["Dudoso", "#F59E0B"], ["No construido", "#DC2626"], ["No observable", "#8C99B2"], ["Fuera del modelo", "#D932D9"]]};
+
+  function cerrarNube() { const c = $q("#iaNube"); if (c && c.dataset.abierto) { c.dataset.abierto = ""; c.innerHTML = ""; $q("#iaDronVer").textContent = "Ver la nube de puntos en 3D"; } }
+  async function abrirVisorNube() {
+    const caja = $q("#iaNube"); if (!caja) return;
+    if (caja.dataset.abierto) { caja.dataset.abierto = ""; caja.innerHTML = ""; $q("#iaDronVer").textContent = "Ver la nube de puntos en 3D"; return; }
+    caja.dataset.abierto = 1; $q("#iaDronVer").textContent = "Ocultar la nube";
+    caja.innerHTML = `<div class="fila" style="margin:10px 0 6px;gap:8px;flex-wrap:wrap;align-items:center">
+        <div class="seg" id="iaNubeModo"><button class="on" data-m="rgb">Color real</button><button data-m="dist">Distancia al modelo</button><button data-m="est">Estado del elemento</button></div>
+        <label class="nota" style="margin:0"><input type="checkbox" id="iaNubeMalla" checked> modelo BIM</label>
+        <label class="nota" style="margin:0"><input type="checkbox" id="iaNubePts" checked> nube</label>
+        <label class="nota" style="margin:0">tamaño <input type="range" id="iaNubeTam" min="1" max="6" step="0.5" value="2" style="width:70px"></label>
+        <label class="nota" style="margin:0">cortar en altura <input type="range" id="iaNubeZ" min="0" max="1000" value="1000" style="width:120px"> <span id="iaNubeZt"></span></label>
+        <span style="flex:1"></span><a class="btn sm" href="/api/ia/escaneo/nube.ply" download>Descargar nube alineada (.ply)</a></div>
+      <div id="iaNubeLienzo" style="position:relative;height:560px;border-radius:10px;overflow:hidden;border:1px solid var(--bd)"><div class="vacio" style="position:absolute;inset:0;display:grid;place-items:center">Cargando puntos…</div></div>
+      <div class="ia-sem" id="iaNubeLey" style="margin-top:6px;font-size:11.5px"></div>
+      <div class="nota">Arrastra para girar · rueda para acercar · clic derecho o Shift para desplazar · el modelo se colorea por el estado que decidió el sistema.</div>`;
+    const lienzo = $q("#iaNubeLienzo");
+    if (!NUBE.montar(lienzo)) { lienzo.innerHTML = '<div class="vacio">Este navegador no tiene WebGL</div>'; return; }
+    try {
+      if (!NUBE.tieneMalla()) NUBE.cargarMalla(S.geo || await (await fetch("/api/geometria")).json());
+      const r = await fetch("/api/ia/escaneo/nube.bin"); if (!r.ok) throw new Error((await r.json()).error);
+      const info = NUBE.cargarNube(await r.arrayBuffer());
+      NUBE.colores(IA.dron); lienzo.querySelector(".vacio")?.remove();
+      $q("#iaNubeZt").textContent = "todo";
+      const ley = () => { $q("#iaNubeLey").innerHTML = LEY[NUBE.cfg.modo === "rgb" ? "rgb" : NUBE.cfg.modo].map(([t, c]) => `<span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;background:${c}"></i>${t}</span>`).join("") +
+        `<span class="nota">${num(info.n, 0)} puntos mostrados${IA.dron.vista ? ` · ${num(IA.dron.vista.fuera_del_modelo_pct, 1)} % fuera del modelo (grúa, andamio, terreno, vecinos…)` : ""}</span>`; };
+      ley();
+      caja.querySelectorAll("#iaNubeModo button").forEach(b => b.onclick = () => { caja.querySelectorAll("#iaNubeModo button").forEach(x => x.classList.toggle("on", x === b)); NUBE.cfg.modo = b.dataset.m; ley(); NUBE.dibujar(); });
+      $q("#iaNubeMalla").onchange = ev => { NUBE.cfg.malla = ev.target.checked; NUBE.dibujar(); };
+      $q("#iaNubePts").onchange = ev => { NUBE.cfg.nube = ev.target.checked; NUBE.dibujar(); };
+      $q("#iaNubeTam").oninput = ev => { NUBE.cfg.tam = +ev.target.value; NUBE.dibujar(); };
+      $q("#iaNubeZ").oninput = ev => { const [a, b] = NUBE.zr(), v = +ev.target.value; NUBE.cfg.zmax = v >= 1000 ? 1e9 : a + (b - a) * v / 1000;
+        $q("#iaNubeZt").textContent = v >= 1000 ? "todo" : `z ≤ ${num(NUBE.cfg.zmax, 1)} m`; NUBE.dibujar(); };
+      NUBE.dibujar();
+    } catch (err) { lienzo.innerHTML = `<div class="vacio">${e_(err.message)}</div>`; }
   }
 
   /* ================================================================ enganche con el panel */

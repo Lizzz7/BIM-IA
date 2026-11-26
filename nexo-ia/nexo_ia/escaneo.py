@@ -211,7 +211,10 @@ def comparar(nube, tol=TOL, alinear=True):
         nube = aplicar(T, nube)
         ang = float(np.degrees(np.arctan2(T[1, 0], T[0, 0])))
         alin = {"aplicada": True, "T": np.round(T, 6).tolist(), "traslacion_m": np.round(T[:3, 3], 3).tolist(),
-                "giro_z_grados": round(ang, 3), "rmse_m": round(rmse or 0, 4), "fraccion_emparejada": round(frac, 3)}
+                "giro_z_grados": round(ang, 3), "rmse_m": round(rmse or 0, 4), "fraccion_emparejada": round(frac, 3),
+                "confiable": bool(frac >= 0.25),
+                "aviso": None if frac >= 0.25 else ("Poca estructura en común con el modelo (p. ej. solo excavación y sótanos): "
+                                                    "la alineación automática puede desviarse. Usa puntos de control en ejes del proyecto.")}
     d, _ = cKDTree(nube).query(ref["P"], distance_upper_bound=tol)
     toca = np.isfinite(d)
     # Visibilidad contra lo que REALMENTE hay (la nube), no contra el modelo completo: un elemento de un piso que aún
@@ -389,15 +392,56 @@ def metricas(comp, verdad):
     return out
 
 
+def guardar_vista(nube, rgb, comp, max_puntos=700_000):
+    """Nube alineada y submuestreada para el visor 3D: color real + distancia al modelo + estado del elemento más cercano."""
+    vox = 0.05
+    idx = nube_io.indices_voxel(nube, vox)
+    while len(idx) > max_puntos:
+        vox *= 1.25
+        idx = nube_io.indices_voxel(nube, vox)
+    xyz = nube[idx]
+    ref = referencia()
+    d, j = cKDTree(ref["P"]).query(xyz, distance_upper_bound=1.0)
+    estado_el = np.array([ESTADOS.index(f["estado"]) for f in comp["elementos"]], np.uint8)
+    cod = np.where(np.isfinite(d) & (d < comp["parametros"]["tolerancia_m"]), estado_el[ref["dueno"][np.minimum(j, len(ref["P"]) - 1)]], len(ESTADOS)).astype(np.uint8)
+    dist = np.where(np.isfinite(d), np.minimum(d * 100, 254), 255).astype(np.uint8)
+    if rgb is None:                                   # sin color: gris por altura
+        g = ((xyz[:, 2] - xyz[:, 2].min()) / max(np.ptp(xyz[:, 2]), 1e-6) * 140 + 80).astype(np.uint8)
+        col = np.c_[g, g, g]
+    else:
+        col = np.asarray(rgb)[idx].astype(np.uint8)
+    np.savez_compressed(D.estado() / "escaneo_nube.npz", xyz=xyz.astype(np.float32), rgb=col, dist=dist, cod=cod)
+    return {"puntos_vista": int(len(xyz)), "voxel_vista_m": round(vox, 3),
+            "fuera_del_modelo_pct": round(100 * float((cod == len(ESTADOS)).mean()), 1)}
+
+
+def vista_binaria():
+    """[uint32 n][float32 xyz·n·3][uint8 rgb·n·3][uint8 dist_cm·n][uint8 estado·n]  (estado 5 = fuera del modelo)."""
+    p = D.estado() / "escaneo_nube.npz"
+    if not p.exists():
+        raise LookupError("Todavía no hay una nube procesada para este modelo")
+    z = np.load(p)
+    return np.uint32(len(z["xyz"])).tobytes() + z["xyz"].tobytes() + z["rgb"].tobytes() + z["dist"].tobytes() + z["cod"].tobytes()
+
+
+def vista_ply(ruta):
+    z = np.load(D.estado() / "escaneo_nube.npz")
+    nube_io.escribir_ply(ruta, z["xyz"], z["rgb"])
+
+
 # ---------------------------------------------------------------- punto de entrada
-def procesar(nube, fecha=None, nombre="nube", verdad=None, alinear=True):
+def procesar(nube, fecha=None, nombre="nube", verdad=None, alinear=True, rgb=None):
     fecha = fecha or date.today().isoformat()
+    nube = np.asarray(nube, float)
     comp = comparar(nube, alinear=alinear)
+    if comp["alineacion"].get("aplicada"):
+        nube = aplicar(np.array(comp["alineacion"]["T"]), nube)
+    vista = guardar_vista(nube, rgb, comp)
     prop = proponer(comp, fecha)
     comp["_alertas_ids"] = [a["id"] for a in prop["alertas_valorizacion"]]
     out = {"ok": True, "nombre": nombre, "fecha": fecha, "version_datos": D.huellas()["version_datos"],
            "avance": avance(comp), "alineacion": comp["alineacion"], "parametros": comp["parametros"], "segundos": comp["segundos"],
-           "alertas_secuencia": comp["alertas_secuencia"], **prop,
+           "vista": vista, "alertas_secuencia": comp["alertas_secuencia"], **prop,
            "elementos": comp["elementos"], "ids_por_estado": {s: [f["id"] for f in comp["elementos"] if f["estado"] == s] for s in ESTADOS}}
     if verdad:
         out["metricas"] = metricas(comp, verdad)
