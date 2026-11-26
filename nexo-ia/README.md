@@ -93,6 +93,48 @@ NEXO_LLM=anthropic ANTHROPIC_API_KEY=… python3 servidor.py
    - Una sola llamada aunque 20 usuarios pidan lo mismo. Caché por obra y versión.
    - Todo queda en `estado/<obra>/bitacora_ia.jsonl`.
 
+## Avance por dron (Scan-vs-BIM) · `escaneo.py`, `sintetico.py`, `nube_io.py`
+
+![Avance por dron](captura_dron.png)
+
+Panel → **Parte diario → «Avance por dron»**. Entra la nube de puntos del vuelo (WebODM `.laz/.ply`, ReCap `.pts`) y sale
+el estado de **cada elemento del modelo** + la propuesta de metrado, en el mismo formato que el parte diario asistido.
+
+```
+nube ─► ICP contra el modelo ─► por elemento: % de su superficie PROPIA con puntos a < 10 cm
+     ─► visibilidad: z-buffer desde las cámaras del plan de vuelo, con la NUBE como obstáculo (un piso que no existe no tapa)
+     ─► construido · dudoso · no construido · no observable
+     ─► secuencia constructiva: lo que soporta algo construido también lo está (inferido); lo embebido sigue a su anfitrión
+     ─► visto y sin registrar → PROPUESTA (validar → registrar, nada automático)
+        registrado y no visto → ALERTA de valorización (posible cobro sin ejecución)
+```
+- **Puntos propios**: se descartan las caras en contacto con otro elemento y los sólidos superpuestos del modelo (R01),
+  porque el vecino construido las «cubriría» y daría falsos positivos.
+- **No adivina**: lo que el dron no puede ver (< 10 % visible) queda *no observable* salvo que la secuencia lo implique.
+- Rutas: `POST /api/ia/escaneo/subir?fecha=&nombre=` (cuerpo = archivo), `POST /api/ia/escaneo/demo {fecha}`, `GET /api/ia/escaneo`.
+
+### Validación con verdad conocida (`python3 pruebas/evaluar_escaneo.py`)
+Nubes sintéticas generadas desde el propio modelo: construido = lo programado hasta la fecha de corte, menos vaciados
+retrasados al azar (y todo lo que se apoya en ellos); 2 registros falsos sembrados; grúa, andamio, material y encofrado
+que no están en el BIM; oclusión desde el plan de vuelo; ruido, huecos y desalineación de hasta 30 cm y 0.8°.
+
+| Escenario | Exactitud | Precisión | Exhaustividad | Decididos | Sin decidir | Alertas | Error ICP |
+|---|---|---|---|---|---|---|---|
+| Fin de mes 3 (sótanos) | 100.0 % | 100.0 % | 100.0 % | 1145 | 121 | 2/2 | 0.37 cm |
+| Fin de mes 6 (base) | 99.9 % | 100.0 % | 99.3 % | 1100 | 166 | 2/2 | 0.22 cm |
+| Fin de mes 6 · ruido 4 cm, 30 % huecos | 99.9 % | 99.3 % | 100.0 % | 1131 | 135 | 2/2 | 0.18 cm |
+| Fin de mes 9 (casco alto) | 100.0 % | 100.0 % | 100.0 % | 1067 | 199 | 1/1 | 0.37 cm |
+| Fin de mes 9 · sin oclusión (cota superior) | 100.0 % | 100.0 % | 100.0 % | 1206 | 60 | 1/1 | 0.13 cm |
+| Fin de mes 6 · sin alinear (control) | 99.2 % | 99.3 % | 94.4 % | 1090 | 176 | 2/2 | sin ICP |
+
+«Sin decidir» = no observables o dudosos: se envían a revisión en vez de adivinar. El control sin ICP muestra por qué
+la alineación es necesaria. **Pendiente: validar con el vuelo real** (medir 5–10 distancias con wincha y comparar).
+
+### Límites del avance por dron
+- Lo interior bajo losa no se ve desde el aire: se infiere por secuencia constructiva, no se mide.
+- Encofrado pegado al elemento (< 10 cm) puede confundirse con concreto; el color de la nube (madera vs. concreto) sería el siguiente paso.
+- Las nubes sintéticas no reemplazan un vuelo real: miden la lógica, no la calidad de la fotogrametría.
+
 ## Límites (decirlos en la presentación)
 - Herramienta académica: los hallazgos son para revisión de un ingeniero; ninguno se aplica solo.
 - Los registros de avance del repo son **datos de prueba**. Los 12 casos del parte diario los escribió el equipo de desarrollo.
