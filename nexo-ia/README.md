@@ -118,7 +118,19 @@ nube ─► ICP contra el modelo ─► por elemento: % de su superficie PROPIA 
 - **Puntos propios**: se descartan las caras en contacto con otro elemento y los sólidos superpuestos del modelo (R01),
   porque el vecino construido las «cubriría» y daría falsos positivos.
 - **No adivina**: lo que el dron no puede ver (< 10 % visible) queda *no observable* salvo que la secuencia lo implique.
-- Rutas: `POST /api/ia/escaneo/subir?fecha=&nombre=` (cuerpo = archivo), `POST /api/ia/escaneo/demo {fecha}`, `GET /api/ia/escaneo`.
+- Rutas: `POST /api/ia/escaneo/subir?fecha=&nombre=` (cuerpo = archivo), `POST /api/ia/escaneo/demo {fecha, desde_ifc}`,
+  `POST /api/ia/escaneo/ifc` (cuerpo = .ifc), `GET /api/ia/escaneo`, `GET /api/ia/escaneo/nube.ply`, `GET /api/ia/escaneo/simulada.ply`.
+
+### IFC del proyecto = georreferencia (`ifc_modelo.py`)
+El IFC exportado de Revit (REP04-CIT-XX-XX-M3-E-00001-R02) viene en **coordenadas compartidas** (E ≈ 640 000,
+N ≈ 9 500 000), igual que una nube de WebODM georreferenciada; el panel trabaja en coordenadas internas.
+Al subir el `.ifc` en la tarjeta (o dejarlo en `3_Modelo_y_parametros/`, se carga solo al arrancar):
+- se cruzan los elementos por **Tag = ElementId**: 1266 de 1266, más 492 bovedillas y 197 barras que solo están en el IFC;
+- se ajusta la transformación compartidas → modelo (giro en planta + traslación, robusto, por centroides de superficie):
+  **giro −15.000°, residuo mediano 0.1 mm**;
+- desde entonces, una nube en UTM/compartidas se convierte sola antes del ICP (se avisa en el resultado);
+- la nube sintética puede generarse **desde la geometría del IFC y en coordenadas UTM** (tal como sale de WebODM):
+  casilla «simular desde el IFC» o `python3 7_Dron/nube_desde_ifc.py --ifc modelo.ifc --fecha 2027-09-30`.
 
 ### Validación con verdad conocida (`python3 pruebas/evaluar_escaneo.py`)
 Nubes sintéticas generadas desde el propio modelo: construido = lo programado hasta la fecha de corte, menos vaciados

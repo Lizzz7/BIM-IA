@@ -3,3 +3,5 @@ scikit-learn>=1.4
 openpyxl>=3.1
 scipy>=1.11
 # opcional, para subir .las/.laz directamente: laspy[lazrs]>=2.5
+# para cargar el IFC del proyecto (georreferencia y nubes simuladas desde el IFC)
+ifcopenshell>=0.8

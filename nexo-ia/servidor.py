@@ -12,7 +12,7 @@ Variables de entorno
   NEXO_TOKEN=<secreto>                           para escribir hay que entrar una vez con /entrar?token=<secreto>
   NEXO_TOKEN_ADMIN=<secreto>                     para publicar versiones: POST /api/admin/publicar (cabecera X-Nexo-Admin)
   NEXO_LLM_POR_MINUTO=30                         límite de llamadas a la IA por IP
-  NEXO_MAX_NUBE_MB=400                           tamaño máximo de una nube de puntos subida (avance por dron)
+  NEXO_MAX_NUBE_MB=400                           tamaño máximo de una nube de puntos o IFC subido (avance por dron)
   NEXO_LLM y las del proveedor                   ver nexo_ia/llm.py
 """
 import gzip
@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from nexo_ia import auditor, bitacora, escaneo, llm, narrador, nube_io, parte_diario, sintetico
+from nexo_ia import auditor, bitacora, escaneo, ifc_modelo, llm, narrador, nube_io, parte_diario, sintetico
 from nexo_ia import datos as D
 
 AQUI = Path(__file__).resolve().parent
@@ -385,6 +385,14 @@ class Manejador(BaseHTTPRequestHandler):
                 self._enviar(200, {"ok": True, **auditoria()})
             elif ruta == "/api/ia/escaneo":               # último escaneo procesado de este modelo
                 self._enviar(200, escaneo.ultimo() or {"ok": True, "vacio": True})
+            elif ruta == "/api/ia/escaneo/ifc":           # georreferencia del IFC cargado (si hay)
+                self._enviar(200, ifc_modelo.georef() or {"ok": True, "vacio": True})
+            elif ruta == "/api/ia/escaneo/simulada.ply":  # la última nube sintética TAL CUAL saldría de WebODM (antes de alinear)
+                p = D.estado() / "nube_simulada.ply"
+                if not p.exists():
+                    raise LookupError("Todavía no se generó una nube sintética")
+                self._enviar(200, p.read_bytes(), "application/octet-stream",
+                             extra={"Content-Disposition": f'attachment; filename="{p.name}"'})
             elif ruta == "/api/ia/escaneo/nube.bin":      # nube alineada para el visor (binario compacto)
                 self._enviar(200, escaneo.vista_binaria(), "application/octet-stream")
             elif ruta == "/api/ia/escaneo/nube.ply":      # la misma nube, con color, para CloudCompare / ReCap / Revit
@@ -426,6 +434,14 @@ class Manejador(BaseHTTPRequestHandler):
                 threading.Thread(target=precalcular, daemon=True).start()
                 self._enviar(200, {"ok": True, **r, "modelos": D.listar()})
                 return
+            if ruta == "/api/ia/escaneo/ifc":             # cuerpo = .ifc del proyecto (coordenadas compartidas)
+                self.exigir_escritura()
+                if n > MAX_NUBE:
+                    raise ValueError(f"El IFC supera {MAX_NUBE // 2**20} MB")
+                self.elegir_modelo(q)
+                with candado("escaneo"):
+                    self._enviar(200, {"ok": True, **ifc_modelo.cargar(self.rfile.read(n), (q.get("nombre") or ["modelo.ifc"])[0])})
+                return
             if ruta == "/api/ia/escaneo/subir":           # cuerpo = archivo de nube (.ply/.las/.laz/.xyz/.pts) tal cual
                 self.exigir_escritura()
                 limitar(self.ip())
@@ -463,10 +479,14 @@ class Manejador(BaseHTTPRequestHandler):
                 limitar(self.ip())
                 fecha = str(ped.get("fecha") or "2027-06-30")[:10]
                 with candado("escaneo"):
+                    con_ifc = bool(ped.get("desde_ifc")) and ifc_modelo.georef() is not None
                     nube, verdad, _, rgb = sintetico.generar(fecha, semilla=int(ped.get("semilla", 7)),
-                                                        falsos_registrados=int(ped.get("falsos", 2)),
-                                                        ruido=float(ped.get("ruido", 0.02)), huecos=float(ped.get("huecos", 0.15)))
-                    self._enviar(200, escaneo.procesar(nube, fecha, f"sintética {fecha} (semilla {verdad['semilla']})", verdad=verdad, rgb=rgb))
+                                                             falsos_registrados=int(ped.get("falsos", 2)),
+                                                             ruido=float(ped.get("ruido", 0.02)), huecos=float(ped.get("huecos", 0.15)),
+                                                             desde_ifc=con_ifc, coords_ifc=con_ifc)
+                    nube_io.escribir_ply(D.estado() / "nube_simulada.ply", nube, rgb)
+                    nombre = f"sintética {fecha} desde {'el IFC, en coordenadas UTM' if con_ifc else 'el modelo del panel'} (semilla {verdad['semilla']})"
+                    self._enviar(200, escaneo.procesar(nube, fecha, nombre, verdad=verdad, rgb=rgb))
             elif ruta == "/api/ia/parte":
                 limitar(self.ip())
                 self._enviar(200, {"ok": True, **parte_diario.procesar(str(ped.get("texto", ""))[:2000], ped.get("fecha"))})
@@ -493,6 +513,13 @@ def main():
         for mm in modelos:
             try:
                 D.usar(mm["id"]); escaneo.referencia()
+                if not ifc_modelo.georef() and mm["id"] == modelos[0]["id"]:     # IFC dejado en el repo: se carga solo
+                    for ifc in sorted((D.REPO / "3_Modelo_y_parametros").glob("*.ifc")):
+                        print(f"[escaneo] cargando georreferencia desde {ifc.name}…")
+                        ifc_modelo.cargar(ifc.read_bytes(), ifc.name)
+                        break
+                if ifc_modelo.georef():
+                    ifc_modelo.mallas_en_modelo()
             except Exception as ex:  # noqa: BLE001
                 print(f"[escaneo] {mm['id']}: {ex}")
     threading.Thread(target=precalentar_escaneo, daemon=True).start()

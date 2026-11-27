@@ -126,16 +126,19 @@ def _nombres_color(nombres):
     return None
 
 
-def escribir_ply(ruta, xyz: np.ndarray, rgb: np.ndarray = None):
-    """PLY binario little-endian; rgb opcional (N,3) uint8."""
-    xyz = np.asarray(xyz, "<f4")
+def escribir_ply(ruta, xyz: np.ndarray, rgb: np.ndarray = None, doble=None):
+    """PLY binario little-endian; rgb opcional (N,3) uint8. En coordenadas UTM (valores grandes) usa doble precisión
+    automáticamente: en float32 un Norte de 9 500 000 m solo tiene resolución de ~1 m."""
+    xyz = np.asarray(xyz, float)
+    doble = bool(np.abs(xyz).max() > 1e5) if doble is None and len(xyz) else bool(doble)
+    t, nt = ("<f8", "double") if doble else ("<f4", "float")
     cab = ["ply", "format binary_little_endian 1.0", f"element vertex {len(xyz)}",
-           "property float x", "property float y", "property float z"]
+           f"property {nt} x", f"property {nt} y", f"property {nt} z"]
     if rgb is not None:
         cab += ["property uchar red", "property uchar green", "property uchar blue"]
-        dt = np.dtype([("x", "<f4"), ("y", "<f4"), ("z", "<f4"), ("r", "u1"), ("g", "u1"), ("b", "u1")])
+        dt = np.dtype([("x", t), ("y", t), ("z", t), ("r", "u1"), ("g", "u1"), ("b", "u1")])
     else:
-        dt = np.dtype([("x", "<f4"), ("y", "<f4"), ("z", "<f4")])
+        dt = np.dtype([("x", t), ("y", t), ("z", t)])
     a = np.empty(len(xyz), dtype=dt)
     a["x"], a["y"], a["z"] = xyz[:, 0], xyz[:, 1], xyz[:, 2]
     if rgb is not None:

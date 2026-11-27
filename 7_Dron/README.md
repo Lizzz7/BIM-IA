@@ -31,8 +31,15 @@ WebODM con las fotos + archivo GCP → `odm_georeferencing/odm_georeferenced_mod
 Exportar a `.ply` si no se instala `laspy` (CloudCompare: *Save as* PLY binario). Submuestrear a 3–5 cm si pesa > 400 MB.
 Para Revit: importar el `.laz`/`.e57` en ReCap → `.rcp` → Insertar › Nube de puntos.
 
-## 4. Comparar con el modelo
+## 4. Sin vuelo todavía: nube simulada desde el IFC
 
-Panel → **Parte diario → Avance por dron** → elegir fecha y archivo → *Procesar nube*.
+```bash
+python3 7_Dron/nube_desde_ifc.py --ifc REP04-CIT-XX-XX-M3-E-00001-R02.ifc --fecha 2027-09-30 --salida vuelo_simulado.ply
+```
+Sale en coordenadas compartidas/UTM (doble precisión), con color y efectos de fotogrametría, más `vuelo_simulado.verdad.json`.
+
+## 5. Comparar con el modelo
+
+Panel → **Parte diario → Avance por dron** → subir primero el `.ifc` (georreferencia) → elegir fecha y la nube → *Procesar archivo*.
 Sin vuelo todavía: *Probar con nube sintética* genera una nube desde el modelo con verdad conocida.
 Detalle técnico y métricas: `nexo-ia/README.md` (sección «Avance por dron») y `nexo-ia/pruebas/evaluar_escaneo.py`.

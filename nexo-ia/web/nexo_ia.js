@@ -6,7 +6,7 @@
   const e_ = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
   const sol = x => x == null ? "—" : "S/ " + Number(x).toLocaleString("es-PE", {minimumFractionDigits: 2, maximumFractionDigits: 2});
   const num = (x, d = 2) => Number(x).toLocaleString("es-PE", {minimumFractionDigits: d, maximumFractionDigits: d});
-  const IA = {aud: null, estado: null, filtro: "", abiertos: {}, narr: {}, parte: null, verTodos: false, dron: null, dronSim: null, dronInf: false};
+  const IA = {aud: null, estado: null, filtro: "", abiertos: {}, narr: {}, parte: null, verTodos: false, dron: null, dronSim: null, dronInf: false, ifc: null, desdeIfc: true};
   async function pide(ruta, cuerpo) {
     const r = await fetch(ruta, cuerpo ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cuerpo)} : {});
     const j = await r.json().catch(() => ({ok: false, error: "respuesta no válida"}));
@@ -244,10 +244,11 @@
         <span class="nota" id="iaDronMeta" style="margin:0"></span></div>
       <div class="fila" style="margin:0;gap:8px;flex-wrap:wrap;align-items:center">
         <label class="nota" style="margin:0">Fecha del vuelo <input type="date" class="inp" id="iaDronFecha"></label>
-        <input type="file" id="iaDronArchivo" accept=".ply,.las,.laz,.xyz,.pts,.txt,.csv" class="inp" style="max-width:260px">
-        <button class="btn sm pri" id="iaDronSubir">✦ Procesar nube</button>
+        <input type="file" id="iaDronArchivo" accept=".ply,.las,.laz,.xyz,.pts,.txt,.csv,.ifc" class="inp" style="max-width:260px">
+        <button class="btn sm pri" id="iaDronSubir">✦ Procesar archivo</button>
         <button class="btn sm" id="iaDronDemo" title="Genera una nube desde el modelo con verdad conocida (avance según cronograma, atrasos y 2 registros falsos sembrados)">Probar con nube sintética</button></div>
-      <div class="nota" style="margin:6px 0 0">Nube de WebODM (.laz/.ply) o exportada de ReCap (.pts/.ply), en coordenadas del modelo (puntos de control en ejes del proyecto). El sistema la alinea (ICP), mide cada elemento y propone el metrado; nada se registra sin tu confirmación.</div>
+      <div class="nota" style="margin:6px 0 0">Nube de WebODM (.laz/.ply) o de ReCap (.pts/.ply). Sube primero el <b>.ifc</b> del proyecto (exportado de Revit en coordenadas compartidas): con él la nube en UTM se convierte sola al modelo. Luego el sistema la alinea (ICP), mide cada elemento y propone el metrado; nada se registra sin tu confirmación.</div>
+      <div id="iaIfc" class="nota" style="margin:6px 0 0"></div>
       <div class="fila" style="margin:8px 0 0"><button class="btn sm" id="iaDronVer" hidden>Ver la nube de puntos en 3D</button></div>
       <div id="iaNube"></div>
       <div id="iaDronRes"></div>`, ".grid");
@@ -259,12 +260,31 @@
       $q("#iaDronDemo").onclick = demoNube;
       $q("#iaDronVer").onclick = abrirVisorNube;
       if (!IA.dron) pide("/api/ia/escaneo").then(r => { if (!r.vacio) { IA.dron = r; pintarResultadoDron(); } }).catch(() => {});
+      pide("/api/ia/escaneo/ifc").then(g => { IA.ifc = g.vacio ? null : g; pintarIfc(); }).catch(() => {});
     }
     if (IA.dron) pintarResultadoDron();
   }
 
+  function pintarIfc() {
+    const g = IA.ifc, box = $q("#iaIfc"); if (!box) return;
+    box.innerHTML = g ? `<span class="tag ok">IFC</span> <b>${e_(g.archivo)}</b> · ${g.elementos_comunes}/${g.elementos_panel} elementos cruzados por ElementId · giro ${num(g.giro_grados, 3)}° · residuo ${num(g.residuo_mediano_m * 1000, 1)} mm${g.n_no_calzan ? ` · ${g.n_no_calzan} no calzan` : ""} · ${Object.entries(g.solo_en_ifc || {}).map(([k, v]) => `${v} ${k.replace("Ifc", "")}`).join(", ")} solo en el IFC
+      <label style="margin-left:10px"><input type="checkbox" id="iaDronDesdeIfc" ${IA.desdeIfc !== false ? "checked" : ""}> simular desde el IFC (nube en UTM, como WebODM)</label>`
+      : "Sin IFC: la nube debe venir en coordenadas del modelo.";
+    const c = $q("#iaDronDesdeIfc"); if (c) c.onchange = ev => IA.desdeIfc = ev.target.checked;
+  }
+  async function subirIfc(f) {
+    $q("#iaDronRes").innerHTML = `<div class="vacio">Leyendo ${e_(f.name)} (${num(f.size / 1048576, 1)} MB), cruzando elementos y calculando la georreferencia (≈1 min)…</div>`;
+    try {
+      const r = await fetch(`/api/ia/escaneo/ifc?nombre=${encodeURIComponent(f.name)}`, {method: "POST", body: f});
+      const j = await r.json(); if (!r.ok || j.ok === false) throw new Error(j.error || "HTTP " + r.status);
+      IA.ifc = j; pintarIfc();
+      $q("#iaDronRes").innerHTML = `<div class="ia-caja"><b>IFC cargado.</b> ${j.elementos_comunes} de ${j.elementos_panel} elementos del panel encontrados en el IFC; coordenadas compartidas → modelo con giro ${num(j.giro_grados, 3)}° y residuo mediano ${num(j.residuo_mediano_m * 1000, 1)} mm. Ahora prueba «Probar con nube sintética» o sube la nube del vuelo.</div>`;
+      if (IA.dron) setTimeout(pintarResultadoDron, 4000);
+    } catch (err) { $q("#iaDronRes").innerHTML = `<div class="vacio">${e_(err.message)}</div>`; }
+  }
   async function subirNube() {
-    const f = $q("#iaDronArchivo").files[0]; if (!f) { alert("Elige un archivo de nube de puntos"); return; }
+    const f = $q("#iaDronArchivo").files[0]; if (!f) { alert("Elige un archivo: nube de puntos o .ifc"); return; }
+    if (/\.ifc$/i.test(f.name)) return subirIfc(f);
     $q("#iaDronRes").innerHTML = `<div class="vacio">Subiendo ${e_(f.name)} (${num(f.size / 1048576, 1)} MB) y comparando con el modelo…</div>`;
     try {
       const r = await fetch(`/api/ia/escaneo/subir?fecha=${encodeURIComponent($q("#iaDronFecha").value)}&nombre=${encodeURIComponent(f.name)}`, {method: "POST", body: f});
@@ -274,7 +294,7 @@
   }
   async function demoNube() {
     $q("#iaDronRes").innerHTML = '<div class="vacio">Generando la nube sintética desde el modelo y comparándola (≈20 s)…</div>';
-    try { cerrarNube(); IA.dron = await pide("/api/ia/escaneo/demo", {fecha: $q("#iaDronFecha").value}); IA.dronSim = null; pintarResultadoDron(); }
+    try { cerrarNube(); IA.dron = await pide("/api/ia/escaneo/demo", {fecha: $q("#iaDronFecha").value, desde_ifc: !!IA.ifc && IA.desdeIfc !== false}); IA.dronSim = null; pintarResultadoDron(); }
     catch (err) { $q("#iaDronRes").innerHTML = `<div class="vacio">${e_(err.message)}</div>`; }
   }
 
@@ -285,7 +305,7 @@
     $q("#iaDronMeta").innerHTML = `${e_(d.nombre)} · ${num(d.parametros.puntos_nube, 0)} puntos · ${num(d.segundos, 1)} s · datos v.${e_(d.version_datos)}`;
     let h = `<div class="ia-chips"><div class="ia-chip on"><b>${num(a.total.avance_pct, 1)} %</b><span>avance físico (${num(a.total.construido_m3, 1)} de ${num(a.total.total_m3, 1)} m³ de concreto)</span></div>` +
       Object.entries(EST).map(([k, [t]]) => `<div class="ia-chip" data-est="${k}"><b>${a.conteo[k]}</b><span>${t}</span></div>`).join("") + `</div>`;
-    h += `<div class="ia-kv"><div>Alineación ICP</div><div>${al.aplicada ? `desplazamiento ${al.traslacion_m.map(x => num(x, 3)).join(" / ")} m · giro ${num(al.giro_z_grados, 2)}° · residuo ${num(al.rmse_m * 100, 1)} cm · ${num(al.fraccion_emparejada * 100, 0)} % de puntos emparejados${al.aviso ? ` <span class="ia-mal">⚠ ${e_(al.aviso)}</span>` : ""}` : "sin alinear"}</div>
+    h += `<div class="ia-kv"><div>Alineación ICP</div><div>${al.aplicada ? `desplazamiento ${al.traslacion_m.map(x => num(x, 3)).join(" / ")} m · giro ${num(al.giro_z_grados, 2)}° · residuo ${num(al.rmse_m * 100, 1)} cm · ${num(al.fraccion_emparejada * 100, 0)} % de puntos emparejados${al.georreferencia ? ` · <span class="tag ok">convertida desde coordenadas UTM/compartidas con el IFC (estaba a ${num(al.georreferencia.distancia_original_km, 0)} km del origen del modelo)</span>` : ""}${al.aviso ? ` <span class="ia-mal">⚠ ${e_(al.aviso)}</span>` : ""}` : "sin alinear"}</div>
       <div>Criterio</div><div>construido si ≥ ${num(d.parametros.cobertura_construido * 100, 0)} % de su parte visible tiene puntos a &lt; ${num(d.parametros.tolerancia_m * 100, 0)} cm; no se juzga lo que el dron no puede ver (&lt; ${num(d.parametros.min_fraccion_visible * 100, 0)} % visible)</div></div>`;
     if (d.metricas) {
       const m = d.metricas, x = m.alertas_valorizacion || {}, ea = m.error_alineacion || {};
@@ -438,7 +458,7 @@
         <label class="nota" style="margin:0"><input type="checkbox" id="iaNubePts" checked> nube</label>
         <label class="nota" style="margin:0">tamaño <input type="range" id="iaNubeTam" min="1" max="6" step="0.5" value="2" style="width:70px"></label>
         <label class="nota" style="margin:0">cortar en altura <input type="range" id="iaNubeZ" min="0" max="1000" value="1000" style="width:120px"> <span id="iaNubeZt"></span></label>
-        <span style="flex:1"></span><a class="btn sm" href="/api/ia/escaneo/nube.ply" download>Descargar nube alineada (.ply)</a></div>
+        <span style="flex:1"></span><a class="btn sm" href="/api/ia/escaneo/nube.ply" download>Descargar nube alineada (.ply)</a>${/^sintética/.test(IA.dron.nombre) ? '<a class="btn sm" href="/api/ia/escaneo/simulada.ply" download title="Tal cual saldría de WebODM: sin alinear y, si viene del IFC, en coordenadas UTM">Descargar nube simulada (.ply)</a>' : ""}</div>
       <div id="iaNubeLienzo" style="position:relative;height:560px;border-radius:10px;overflow:hidden;border:1px solid var(--bd)"><div class="vacio" style="position:absolute;inset:0;display:grid;place-items:center">Cargando puntos…</div></div>
       <div class="ia-sem" id="iaNubeLey" style="margin-top:6px;font-size:11.5px"></div>
       <div class="nota">Arrastra para girar · rueda para acercar · clic derecho o Shift para desplazar · el modelo se colorea por el estado que decidió el sistema.</div>`;

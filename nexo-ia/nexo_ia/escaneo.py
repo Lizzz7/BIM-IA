@@ -433,7 +433,12 @@ def vista_ply(ruta):
 def procesar(nube, fecha=None, nombre="nube", verdad=None, alinear=True, rgb=None):
     fecha = fecha or date.today().isoformat()
     nube = np.asarray(nube, float)
+    ref = referencia()
+    from . import ifc_modelo
+    nube, georref = ifc_modelo.a_modelo_si_hace_falta(nube, (ref["P"].min(0) + ref["P"].max(0)) / 2,
+                                                      float(np.linalg.norm(ref["P"].max(0) - ref["P"].min(0)) / 2))
     comp = comparar(nube, alinear=alinear)
+    comp["alineacion"]["georreferencia"] = georref
     if comp["alineacion"].get("aplicada"):
         nube = aplicar(np.array(comp["alineacion"]["T"]), nube)
     vista = guardar_vista(nube, rgb, comp)

@@ -49,10 +49,23 @@ def _caja(c, dims, rng, espaciado):
 
 
 def generar(fecha_corte, semilla=7, retrasados=0.08, ventana_dias=45, falsos_registrados=2, espaciado=0.07,
-            ruido=0.02, huecos=0.15, desalinear=True, oclusion=True, objetos_ajenos=True, z_suelo=0.0):
+            ruido=0.02, huecos=0.15, desalinear=True, oclusion=True, objetos_ajenos=True, z_suelo=0.0,
+            desde_ifc=False, coords_ifc=False):
+    """desde_ifc: la geometría sale del IFC cargado (incluye bovedillas y barras que el panel no metra).
+    coords_ifc: la nube sale en las coordenadas del IFC (compartidas / UTM), como la entrega WebODM."""
     rng = np.random.default_rng(semilla)
     corte = _fecha(fecha_corte) if isinstance(fecha_corte, str) else fecha_corte or date.today()
     E, tri = D.elementos(), triangulos()
+    extras_ifc = []
+    if desde_ifc or coords_ifc:
+        from . import ifc_modelo
+        por_id, extras_ifc = ifc_modelo.mallas_en_modelo()
+        if por_id is None:
+            raise ValueError("Primero carga el IFC del proyecto")
+        if desde_ifc:
+            tri = {i: por_id.get(i, t) for i, t in tri.items()}
+        else:
+            extras_ifc = []
     ids = sorted(tri)
 
     # 1) verdad según el cronograma
@@ -104,6 +117,12 @@ def generar(fecha_corte, semilla=7, retrasados=0.08, ventana_dias=45, falsos_reg
         g = 0.50 + 0.17 * min(edad, 30) / 30                                 # concreto fresco más oscuro, se aclara al secar
         manchas = 0.035 * (np.sin(p[:, 0] * 1.7 + i) + np.sin(p[:, 1] * 1.3 + p[:, 2] * 0.9))[:, None]
         agregar(p, i, np.array([g, g, g * 1.02]) + manchas, 0.025)
+    # elementos que solo están en el IFC (bovedillas del aligerado, barras): existen si su nivel ya tiene algo construido
+    niveles_hechos = {E[i]["nivel"] for i in construidos}
+    for x in extras_ifc:
+        if x["nivel"] in niveles_hechos:
+            tono = (0.45, 0.26, 0.16) if x["clase"] == "IfcReinforcingBar" else (0.72, 0.42, 0.30)    # acero / arcilla
+            agregar(muestrear_superficie(x["tri"], espaciado, rng), -4, tono, 0.04)
     todos = np.vstack([tri[i].reshape(-1, 3) for i in ids])
     bmin, bmax = todos.min(0), todos.max(0)
     hecho = np.vstack([tri[i].reshape(-1, 3) for i in construidos]) if construidos else todos[:1]
@@ -188,11 +207,16 @@ def generar(fecha_corte, semilla=7, retrasados=0.08, ventana_dias=45, falsos_reg
         T[:3, :3] = [[np.cos(a), -np.sin(a), 0], [np.sin(a), np.cos(a), 0], [0, 0, 1]]
         T[:3, 3] = rng.uniform(-0.3, 0.3, 3) * [1, 1, 0.3]
         P = P @ T[:3, :3].T + T[:3, 3]
+    if coords_ifc:
+        from . import ifc_modelo
+        Tg = np.array(ifc_modelo.georef()["T_modelo_a_ifc"])
+        P = P @ Tg[:3, :3].T + Tg[:3, 3]
 
     puntos_por_el = {int(i): int(n) for i, n in zip(*np.unique(L[L >= 0], return_counts=True))}
     verdad = {"fecha_corte": corte.isoformat(), "semilla": semilla, "construidos": sorted(int(i) for i in construidos),
               "retrasados": sorted(int(i) for i in retr), "actividades_retrasadas": sorted(act_retr), "falsos_registrados": sorted(int(i) for i in falsos),
               "construidos_invisibles": sorted(int(i) for i in construidos if puntos_por_el.get(i, 0) < 10),
               "T_aplicada": T.tolist(), "ruido_m": ruido, "huecos": huecos, "espaciado_m": espaciado,
-              "puntos_antes_oclusion": int(n0), "puntos": int(len(P)), "oclusion": oclusion}
+              "puntos_antes_oclusion": int(n0), "puntos": int(len(P)), "oclusion": oclusion,
+              "geometria": "IFC" if desde_ifc else "panel", "coordenadas": "IFC (compartidas/UTM)" if coords_ifc else "modelo"}
     return P, verdad, L, (C * 255).astype(np.uint8)

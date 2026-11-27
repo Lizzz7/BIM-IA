@@ -56,6 +56,21 @@ def test_escaneo_sintetico_acierta_y_alerta():
         assert x["cantidad"] <= p["metrado"] - ej.get(x["id"], {}).get(x["item"], 0) + 1e-6
 
 
+def test_ifc_georreferencia_y_nube_utm():
+    """Solo corre si NEXO_IFC_PRUEBA apunta al .ifc del proyecto (no está en el repo)."""
+    ruta = os.environ.get("NEXO_IFC_PRUEBA")
+    if not ruta or not Path(ruta).exists():
+        print("  (sin NEXO_IFC_PRUEBA: se omite)")
+        return
+    from nexo_ia import ifc_modelo
+    info = ifc_modelo.cargar(Path(ruta).read_bytes(), Path(ruta).name)
+    assert info["elementos_comunes"] == info["elementos_panel"] and info["residuo_mediano_m"] < 0.01
+    nube, verdad, _, rgb = S.generar("2027-09-30", desde_ifc=True, coords_ifc=True)
+    assert np.abs(nube).max() > 1e5                                  # sale en UTM/compartidas
+    r = X.procesar(nube, "2027-09-30", "utm", verdad=verdad, rgb=rgb)
+    assert r["alineacion"]["georreferencia"] and r["metricas"]["exactitud"] >= 0.97
+
+
 if __name__ == "__main__":
     fallos = 0
     for nombre, f in list(globals().items()):
