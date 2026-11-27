@@ -130,9 +130,8 @@ def generar(fecha_corte, semilla=7, retrasados=0.08, ventana_dias=45, falsos_reg
     losas = [tri[i][..., 2].max() for i in construidos if E[i]["grupo"] in ("ALI", "LMA")]
     piso = max(losas) if losas else z_suelo                          # la losa construida más alta: ahí se acopia material
     if objetos_ajenos:
-        agregar(_caja((bmax[0] + 7, bmin[1] - 5, z_suelo + 12), (1.4, 1.4, 24), rng, espaciado * 2), -2, (0.95, 0.76, 0.10))    # torre grúa
-        agregar(_caja((bmax[0] + 7 - 9, bmin[1] - 5, z_suelo + 24), (20, 1.0, 1.0), rng, espaciado * 2), -2, (0.95, 0.76, 0.10))  # pluma
-        agregar(_caja((bmin[0] - 1.6, (bmin[1] + bmax[1]) / 2, z_suelo + 3), (0.8, 10, 6), rng, espaciado * 2), -2, (0.20, 0.38, 0.72))  # andamio
+        agregar(_caja((bmax[0] + 9, bmin[1] - 7, z_suelo + 10), (1.2, 1.2, 20), rng, espaciado * 2), -2, (0.95, 0.76, 0.10))    # torre grúa (afuera)
+        agregar(_caja((bmin[0] - 1.2, (bmin[1] + bmax[1]) / 2, z_suelo + 2), (0.6, 6, 4), rng, espaciado * 2), -2, (0.20, 0.38, 0.72))  # andamio
         for k in range(3):                                                                                       # material sobre la losa
             tono = [(0.66, 0.30, 0.20), (0.82, 0.81, 0.78), (0.60, 0.44, 0.27)][k]                              # ladrillo, cemento, madera
             agregar(_caja((rng.uniform(bmin[0] + 2, bmax[0] - 2), rng.uniform(bmin[1] + 2, bmax[1] - 2), piso + 0.5),
@@ -153,19 +152,18 @@ def generar(fecha_corte, semilla=7, retrasados=0.08, ventana_dias=45, falsos_reg
             barras = [(x, y) for x in xs for y in ys if x in (xs[0], xs[-1]) or y in (ys[0], ys[-1])]
             zz = np.arange(mx[2], mx[2] + 0.9, 0.025)
             agregar(np.array([(x + rng.normal(0, 0.005), y + rng.normal(0, 0.005), z) for x, y in barras for z in zz]), -2, (0.45, 0.26, 0.16), 0.04)
-        # vecinos (medianeras de sillar) a ambos lados
-        for lado, alto in ((-1, 9.0), (1, 6.0)):
-            yc = (bmin[1] - 7.5) if lado < 0 else (bmax[1] + 7.5)
-            agregar(_caja(((bmin[0] + bmax[0]) / 2, yc, z_suelo + alto / 2), (bmax[0] - bmin[0] + 6, 12, alto), rng, espaciado * 3), -3, (0.88, 0.85, 0.77), 0.05)
+        # medianeras de sillar de los vecinos (solo el muro que da a la obra, no el edificio entero)
+        for lado, alto in ((-1, 7.0), (1, 5.0)):
+            yc = (bmin[1] - 2.0) if lado < 0 else (bmax[1] + 2.0)
+            agregar(_caja(((bmin[0] + bmax[0]) / 2, yc, z_suelo + alto / 2), (bmax[0] - bmin[0] + 4, 0.3, alto), rng, espaciado * 2), -3, (0.88, 0.85, 0.77), 0.05)
     # terreno (fuera de la excavación) + excavación: cortes de suelo y fondo
-    gx = np.arange(bmin[0] - 15, bmax[0] + 15, espaciado * 4)
-    gy = np.arange(bmin[1] - 15, bmax[1] + 15, espaciado * 4)
+    gx = np.arange(bmin[0] - 8, bmax[0] + 8, espaciado * 4)
+    gy = np.arange(bmin[1] - 8, bmax[1] + 8, espaciado * 4)
     G = np.stack(np.meshgrid(gx, gy), -1).reshape(-1, 2)
     G = G + rng.uniform(-espaciado * 2, espaciado * 2, G.shape)                  # sin patrón de grilla
     m = 0.3
     fuera = (G[:, 0] < bmin[0] - m) | (G[:, 0] > bmax[0] + m) | (G[:, 1] < bmin[1] - m) | (G[:, 1] > bmax[1] + m)
-    vecino = (G[:, 1] < bmin[1] - 1.5) | (G[:, 1] > bmax[1] + 1.5)
-    G = G[fuera & ~(vecino & (np.abs(G[:, 0] - (bmin[0] + bmax[0]) / 2) < (bmax[0] - bmin[0]) / 2 + 3))]
+    G = G[fuera]
     agregar(np.c_[G, rng.normal(z_suelo, 0.03, len(G))], -1, (0.74, 0.64, 0.50), 0.04)
     fondo = np.stack(np.meshgrid(np.arange(bmin[0] - m, bmax[0] + m, espaciado * 3), np.arange(bmin[1] - m, bmax[1] + m, espaciado * 3)), -1).reshape(-1, 2)
     fondo = fondo + rng.uniform(-espaciado * 1.5, espaciado * 1.5, fondo.shape)

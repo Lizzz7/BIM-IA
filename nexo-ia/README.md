@@ -102,7 +102,7 @@ NEXO_LLM=anthropic ANTHROPIC_API_KEY=… python3 servidor.py
 **Visor de la nube** (botón «Ver la nube de puntos en 3D»): los puntos alineados sobre el modelo, que se colorea por el
 estado decidido. Tres modos de color: *color real* de las fotos, *distancia al modelo* (verde ≤ 4 cm, ámbar 4–10 cm,
 rojo > 10 cm, magenta = fuera del modelo: grúa, terreno, vecinos) y *estado del elemento*. Corte por altura para ver
-dentro. «Descargar nube alineada (.ply)» la abre en CloudCompare, ReCap o Revit.
+dentro. Por defecto se ocultan los puntos de entorno (terreno, grúa, vecinos: lo que no cae sobre ningún elemento); la casilla «entorno» los muestra. «Descargar nube alineada (.ply)» la abre en CloudCompare, ReCap o Revit.
 
 Panel → **Parte diario → «Avance por dron»**. Entra la nube de puntos del vuelo (WebODM `.laz/.ply`, ReCap `.pts`) y sale
 el estado de **cada elemento del modelo** + la propuesta de metrado, en el mismo formato que el parte diario asistido.

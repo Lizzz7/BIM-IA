@@ -351,7 +351,7 @@
   /* ================================================================ VISOR DE LA NUBE (puntos del dron sobre el modelo) */
   const COL_EST = [[0.09, 0.64, 0.29], [0.13, 0.62, 0.72], [0.96, 0.62, 0.04], [0.86, 0.15, 0.15], [0.55, 0.6, 0.7], [0.85, 0.2, 0.85]];
   const NUBE = (() => {
-    let cv, gl, pP, pM, bufs = {}, n = 0, rangos = [], cam = {th: -0.9, ph: 0.5, d: 60, t: [0, 0, 0]}, radio = 30, cfg = {modo: "rgb", malla: true, nube: true, tam: 2, zmax: 1e9}, colEl = {}, zr = [0, 1];
+    let cv, gl, pP, pM, bufs = {}, n = 0, nEdif = 0, rangos = [], cam = {th: -0.9, ph: 0.5, d: 60, t: [0, 0, 0]}, radio = 30, cfg = {modo: "rgb", malla: true, nube: true, entorno: false, tam: 2, zmax: 1e9}, colEl = {}, zr = [0, 1];
     const VS_P = `attribute vec3 p; attribute vec3 c; uniform mat4 mvp; uniform float sz; uniform float zmax; varying vec3 vc;
       void main(){ vc = c; gl_PointSize = sz; gl_Position = p.z > zmax ? vec4(2.0,2.0,2.0,1.0) : mvp * vec4(p,1.0); }`;
     const FS_P = `precision mediump float; varying vec3 vc; void main(){ gl_FragColor = vec4(vc,1.0); }`;
@@ -399,11 +399,18 @@
     }
     function cargarNube(ab) {
       n = new Uint32Array(ab, 0, 1)[0];
-      const xyz = new Float32Array(ab, 4, n * 3), rgb = new Uint8Array(ab, 4 + 12 * n, n * 3), dist = new Uint8Array(ab, 4 + 15 * n, n), cod = new Uint8Array(ab, 4 + 16 * n, n);
+      const xyz0 = new Float32Array(ab, 4, n * 3), rgb0 = new Uint8Array(ab, 4 + 12 * n, n * 3), dist0 = new Uint8Array(ab, 4 + 15 * n, n), cod0 = new Uint8Array(ab, 4 + 16 * n, n);
+      // los puntos que caen sobre el modelo van primero; el entorno (terreno, grúa, vecinos…) al final: así se puede ocultar
+      const orden = new Uint32Array(n); let a = 0, z = n - 1;
+      for (let i = 0; i < n; i++) { if (cod0[i] < 5) orden[a++] = i; else orden[z--] = i; }
+      nEdif = a;
+      const xyz = new Float32Array(n * 3), rgb = new Uint8Array(n * 3), dist = new Uint8Array(n), cod = new Uint8Array(n);
+      for (let k = 0; k < n; k++) { const i = orden[k]; xyz[k * 3] = xyz0[i * 3]; xyz[k * 3 + 1] = xyz0[i * 3 + 1]; xyz[k * 3 + 2] = xyz0[i * 3 + 2];
+        rgb[k * 3] = rgb0[i * 3]; rgb[k * 3 + 1] = rgb0[i * 3 + 1]; rgb[k * 3 + 2] = rgb0[i * 3 + 2]; dist[k] = dist0[i]; cod[k] = cod0[i]; }
       const cd = new Uint8Array(n * 3), ce = new Uint8Array(n * 3);
       const mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
       for (let i = 0; i < n; i++) {
-        for (let c = 0; c < 3; c++) { const v = xyz[i * 3 + c]; if (v < mn[c]) mn[c] = v; if (v > mx[c]) mx[c] = v; }
+        if (i < nEdif) for (let c = 0; c < 3; c++) { const v = xyz[i * 3 + c]; if (v < mn[c]) mn[c] = v; if (v > mx[c]) mx[c] = v; }
         const d = dist[i]; let r, g, b;
         if (d === 255) { r = 217; g = 50; b = 217; } else if (d <= 4) { r = 22; g = 163; b = 74; } else if (d <= 10) { const t = (d - 4) / 6; r = 22 + t * 223; g = 163 + t * 15; b = 74 - t * 62; } else { const t = Math.min(1, (d - 10) / 40); r = 245 - t * 25; g = 158 - t * 120; b = 11 + t * 27; }
         cd[i * 3] = r; cd[i * 3 + 1] = g; cd[i * 3 + 2] = b;
@@ -411,7 +418,7 @@
       }
       bufs.p = buf(xyz); bufs.rgb = buf(rgb); bufs.dist = buf(cd); bufs.est = buf(ce);
       cam.t = mn.map((a, i) => (a + mx[i]) / 2); radio = Math.hypot(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) / 2; cam.d = radio * 1.9; zr = [mn[2], mx[2]];
-      return {n, zmin: mn[2], zmax: mx[2]};
+      return {n, nEdif, zmin: mn[2], zmax: mx[2]};
     }
     function colores(dron) { colEl = {}; (dron.elementos || []).forEach(f => colEl[f.id] = COL_EST[ESTADOS_ORDEN.indexOf(f.estado)] || COL_EST[4]); }
     function dibujar() {
@@ -425,7 +432,7 @@
         const aP = gl.getAttribLocation(pP, "p"), aC = gl.getAttribLocation(pP, "c");
         gl.bindBuffer(gl.ARRAY_BUFFER, bufs.p); gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ARRAY_BUFFER, bufs[cfg.modo]); gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.UNSIGNED_BYTE, true, 0, 0);
-        gl.drawArrays(gl.POINTS, 0, n); gl.disableVertexAttribArray(aC);
+        gl.drawArrays(gl.POINTS, 0, cfg.entorno ? n : nEdif); gl.disableVertexAttribArray(aC);
       }
       if (cfg.malla && rangos.length) {
         gl.useProgram(pM); gl.uniformMatrix4fv(gl.getUniformLocation(pM, "mvp"), false, mvp); gl.uniform1f(gl.getUniformLocation(pM, "zmax"), cfg.zmax);
@@ -434,8 +441,9 @@
         gl.bindBuffer(gl.ARRAY_BUFFER, bufs.mP); gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ARRAY_BUFFER, bufs.mN); gl.enableVertexAttribArray(aN); gl.vertexAttribPointer(aN, 3, gl.FLOAT, false, 0, 0);
         gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(!cfg.nube || !n);
-        const alfa = cfg.nube && n ? 0.28 : 0.9, uc = gl.getUniformLocation(pM, "col");
-        rangos.forEach(r => { const c = colEl[r.id] || COL_EST[4]; gl.uniform4f(uc, c[0], c[1], c[2], alfa); gl.drawArrays(gl.TRIANGLES, r.ini, r.n); });
+        const conPts = cfg.nube && n, uc = gl.getUniformLocation(pM, "col");
+        rangos.forEach(r => { const c = colEl[r.id] || COL_EST[4], hecho = c === COL_EST[0] || c === COL_EST[1];
+          gl.uniform4f(uc, c[0], c[1], c[2], conPts ? (hecho ? 0.10 : c === COL_EST[3] ? 0.30 : 0.14) : 0.9); gl.drawArrays(gl.TRIANGLES, r.ini, r.n); });
         gl.disableVertexAttribArray(aN); gl.depthMask(true);
       }
     }
@@ -456,6 +464,7 @@
         <div class="seg" id="iaNubeModo"><button class="on" data-m="rgb">Color real</button><button data-m="dist">Distancia al modelo</button><button data-m="est">Estado del elemento</button></div>
         <label class="nota" style="margin:0"><input type="checkbox" id="iaNubeMalla" checked> modelo BIM</label>
         <label class="nota" style="margin:0"><input type="checkbox" id="iaNubePts" checked> nube</label>
+        <label class="nota" style="margin:0" title="Puntos que no caen sobre ningún elemento del modelo: terreno, excavación, grúa, andamio, vecinos, material"><input type="checkbox" id="iaNubeEnt"> entorno (terreno, grúa, vecinos)</label>
         <label class="nota" style="margin:0">tamaño <input type="range" id="iaNubeTam" min="1" max="6" step="0.5" value="2" style="width:70px"></label>
         <label class="nota" style="margin:0">cortar en altura <input type="range" id="iaNubeZ" min="0" max="1000" value="1000" style="width:120px"> <span id="iaNubeZt"></span></label>
         <span style="flex:1"></span><a class="btn sm" href="/api/ia/escaneo/nube.ply" download>Descargar nube alineada (.ply)</a>${/^sintética/.test(IA.dron.nombre) ? '<a class="btn sm" href="/api/ia/escaneo/simulada.ply" download title="Tal cual saldría de WebODM: sin alinear y, si viene del IFC, en coordenadas UTM">Descargar nube simulada (.ply)</a>' : ""}</div>
@@ -471,11 +480,13 @@
       NUBE.colores(IA.dron); lienzo.querySelector(".vacio")?.remove();
       $q("#iaNubeZt").textContent = "todo";
       const ley = () => { $q("#iaNubeLey").innerHTML = LEY[NUBE.cfg.modo === "rgb" ? "rgb" : NUBE.cfg.modo].map(([t, c]) => `<span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;background:${c}"></i>${t}</span>`).join("") +
-        `<span class="nota">${num(info.n, 0)} puntos mostrados${IA.dron.vista ? ` · ${num(IA.dron.vista.fuera_del_modelo_pct, 1)} % fuera del modelo (grúa, andamio, terreno, vecinos…)` : ""}</span>`; };
+        `<span class="nota">${num(NUBE.cfg.entorno ? info.n : info.nEdif, 0)} puntos mostrados${NUBE.cfg.entorno ? "" : ` (sobre el modelo; ${num(info.n - info.nEdif, 0)} de entorno ocultos)`}</span>` +
+        `<span class="nota">Modelo: <b style="color:#DC2626">rojo = aún no construido</b> (por eso ahí no hay puntos) · verde = construido · gris = el dron no lo ve</span>`; };
       ley();
       caja.querySelectorAll("#iaNubeModo button").forEach(b => b.onclick = () => { caja.querySelectorAll("#iaNubeModo button").forEach(x => x.classList.toggle("on", x === b)); NUBE.cfg.modo = b.dataset.m; ley(); NUBE.dibujar(); });
       $q("#iaNubeMalla").onchange = ev => { NUBE.cfg.malla = ev.target.checked; NUBE.dibujar(); };
       $q("#iaNubePts").onchange = ev => { NUBE.cfg.nube = ev.target.checked; NUBE.dibujar(); };
+      $q("#iaNubeEnt").onchange = ev => { NUBE.cfg.entorno = ev.target.checked; ley(); NUBE.dibujar(); };
       $q("#iaNubeTam").oninput = ev => { NUBE.cfg.tam = +ev.target.value; NUBE.dibujar(); };
       $q("#iaNubeZ").oninput = ev => { const [a, b] = NUBE.zr(), v = +ev.target.value; NUBE.cfg.zmax = v >= 1000 ? 1e9 : a + (b - a) * v / 1000;
         $q("#iaNubeZt").textContent = v >= 1000 ? "todo" : `z ≤ ${num(NUBE.cfg.zmax, 1)} m`; NUBE.dibujar(); };
