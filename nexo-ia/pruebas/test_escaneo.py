@@ -60,8 +60,7 @@ def test_ifc_georreferencia_y_nube_utm():
     """Solo corre si NEXO_IFC_PRUEBA apunta al .ifc del proyecto (no está en el repo)."""
     ruta = os.environ.get("NEXO_IFC_PRUEBA")
     if not ruta or not Path(ruta).exists():
-        print("  (sin NEXO_IFC_PRUEBA: se omite)")
-        return
+        return "omitida (define NEXO_IFC_PRUEBA=/ruta/al/proyecto.ifc)"
     from nexo_ia import ifc_modelo
     info = ifc_modelo.cargar(Path(ruta).read_bytes(), Path(ruta).name)
     assert info["elementos_comunes"] == info["elementos_panel"] and info["residuo_mediano_m"] < 0.01
@@ -76,7 +75,7 @@ if __name__ == "__main__":
     for nombre, f in list(globals().items()):
         if nombre.startswith("test_"):
             try:
-                f(); print(f"✔ {nombre}")
+                r = f(); print(f"– {nombre}: {r}" if isinstance(r, str) else f"✔ {nombre}")
             except Exception as ex:  # noqa: BLE001
                 fallos += 1; print(f"✘ {nombre}: {type(ex).__name__}: {ex}")
     sys.exit(1 if fallos else 0)

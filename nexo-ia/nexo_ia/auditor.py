@@ -205,7 +205,54 @@ def r06_coherencia_pu():
     return out
 
 
-REGLAS = [r01_solapes, r02_fc_tipo_vs_material, r03_sin_material, r04_mayor_metrado, r05_secuencia, r06_coherencia_pu]
+def d01_registrado_no_visto():
+    """Avance por dron: elemento con metrado registrado que el último escaneo no ve (posible valorización sin ejecución)."""
+    from . import escaneo
+    u = escaneo.ultimo()
+    if not u:
+        return []
+    reg = D.leer_registros()["elementos"]
+    out = []
+    for a in u.get("alertas_valorizacion", []):
+        e = D.elementos().get(a["id"])
+        if not e:
+            continue
+        items = sorted({it for _, it, _ in D.parsear(reg.get(str(a["id"]), {}).get("registro", ""))})
+        monto = sum(q * D.partidas()[it]["pu"] for _, it, q in D.parsear(reg.get(str(a["id"]), {}).get("registro", "")) if it in D.partidas())
+        out.append(hallazgo(
+            "D01", "Registrado pero el dron no lo ve", "dron (Scan-vs-BIM)", a["severidad"],
+            f"{e['tipo']} ({e['nivel']}): S/ {monto:,.2f} valorizados y el dron {'no lo ve' if a['estado'] == 'no_construido' else 'lo ve solo en parte'}",
+            [a["id"]], partidas=items, impacto=monto, clave=u.get("fecha", ""),
+            evidencia={"fuente": f"escaneo «{u.get('nombre', '')}» del {u.get('fecha', '')} + registros.json",
+                       "formula": "impacto = Σ metrado registrado del elemento × P.U.  (lo que se cobraría sin ejecución)",
+                       "valores": {"estado_dron": a["estado"], "visible": a["visible"], "cobertura_visible": a["cobertura_visible"],
+                                   "monto_registrado": round(monto, 2), "fecha_escaneo": u.get("fecha")}}))
+    return out
+
+
+def d02_sin_soporte_visible():
+    """Avance por dron: algo construido encima de un elemento que se ve claramente ausente (secuencia imposible)."""
+    from . import escaneo
+    u = escaneo.ultimo()
+    if not u:
+        return []
+    out = []
+    for a in u.get("alertas_secuencia", []):
+        e = D.elementos().get(a["id"])
+        if not e:
+            continue
+        out.append(hallazgo(
+            "D02", "Construido sin soporte visible", "dron (Scan-vs-BIM)", "media",
+            f"{e['tipo']} ({e['nivel']}) se ve construido pero {len(a['sin_soporte_visible'])} elemento(s) de apoyo no",
+            [a["id"]] + a["sin_soporte_visible"], clave=u.get("fecha", ""),
+            evidencia={"fuente": f"escaneo «{u.get('nombre', '')}» del {u.get('fecha', '')}",
+                       "formula": "estado(elemento) = construido  y  estado(apoyo) = no construido con buena visibilidad",
+                       "valores": {"elemento": a["id"], "apoyos_no_vistos": a["sin_soporte_visible"], "fecha_escaneo": u.get("fecha")}}))
+    return out
+
+
+REGLAS = [r01_solapes, r02_fc_tipo_vs_material, r03_sin_material, r04_mayor_metrado, r05_secuencia, r06_coherencia_pu,
+          d01_registrado_no_visto, d02_sin_soporte_visible]
 
 
 def auditar(incluir_ml=True):

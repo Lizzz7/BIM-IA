@@ -136,7 +136,14 @@ def cargar(datos_ifc: bytes, nombre="modelo.ifc"):
 
 def georef():
     p = D.estado() / "georef_ifc.json"
-    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+    if not p.exists():
+        return None
+    g = json.loads(p.read_text(encoding="utf-8"))
+    actual = D.huellas()["version_datos"]
+    if g.get("version_datos") and g["version_datos"] != actual:      # el IFC se cargó con otra versión del modelo
+        g["aviso"] = (f"La georreferencia se calculó con la versión de datos {g['version_datos']} y la actual es {actual}: "
+                      "vuelve a subir el IFC de esta versión si el modelo cambió de posición.")
+    return g
 
 
 def ruta_ifc():

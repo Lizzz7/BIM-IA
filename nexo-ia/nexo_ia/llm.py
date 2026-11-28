@@ -20,8 +20,8 @@ import urllib.request
 PROVEEDOR = os.environ.get("NEXO_LLM", "plantilla").lower()
 MODELO = os.environ.get("NEXO_LLM_MODELO", {
     "ollama": "granite3.3:8b", "openai": "gpt-4o-mini", "watsonx": "ibm/granite-3-8b-instruct",
-    "anthropic": "claude-sonnet-4-5", "plantilla": "plantilla"}.get(PROVEEDOR, ""))
-TIEMPO = float(os.environ.get("NEXO_LLM_TIMEOUT", "60"))
+    "anthropic": "claude-sonnet-5-5", "plantilla": "plantilla"}.get(PROVEEDOR, ""))
+TIEMPO = float(os.environ.get("NEXO_LLM_TIMEOUT", "20"))
 
 
 class ErrorLLM(Exception):

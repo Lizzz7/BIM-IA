@@ -139,6 +139,38 @@ def test_niveles_desde_el_modelo():
     assert r and r[0]["paquete"] == "T02"
 
 
+def test_parte_diario_como_se_habla_en_obra():
+    D.usar(REPO_ID)
+    casos = {"Se vació la losa del 3er piso": ("T06", "ambos", "concreto"),
+             "Encofrado de vigas segundo piso sector A al 50%": ("T05", "A", "encofrado"),
+             "Vaciamos las columnas del 2do piso, lado A": ("T05", "A", "concreto"),
+             "Vaciado de zapatas sector B": ("CIM", "B", "concreto")}
+    for texto, (paq, sec, clase) in casos.items():
+        t = P.interpretar_reglas(texto)["trabajos"]
+        assert t and (t[0]["paquete"], t[0]["sector"], t[0]["clase"]) == (paq, sec, clase), (texto, t)
+
+
+def test_parte_diario_sugiere_en_vez_de_no_entendi():
+    D.usar(REPO_ID)
+    r = P.interpretar_reglas("Vaciado de columnas")
+    assert not r["trabajos"] and "nivel" in r["dudas"][0] and r["sugerencias"]
+    s = P.interpretar_reglas(r["sugerencias"][0])["trabajos"]            # la sugerencia se puede registrar tal cual
+    assert s and s[0]["grupos"] == ["COL"] and s[0]["clase"] == "concreto"
+    assert P.interpretar_reglas("Llovió toda la mañana, no se trabajó") == {"trabajos": [], "dudas": [], "sugerencias": []}
+
+
+def test_chat_responde_costos_con_los_numeros_del_panel():
+    from nexo_ia import consultas, costos
+    D.usar(REPO_ID)
+    assert consultas.es_pregunta("¿Cuánto llevamos valorizado este mes?") and not consultas.es_pregunta("Vaciado de columnas del piso 2")
+    r = consultas.responder("cuánto llevamos valorizado", "2027-06-30")
+    acum = next(c["valor"] for c in r["cifras"] if c["etiqueta"] == "Acumulado")
+    assert abs(acum - costos.ev(hasta="2027-06-30")) < 0.01
+    r = consultas.responder("saldo de la partida 04.05.01", "2027-06-30")
+    assert r["tema"] == "partida" and "04.05.01" in r["texto"]
+    assert consultas.responder("como va el concreto armado?", "2027-06-30")["tema"] == "capitulo"
+
+
 # ---------------------------------------------------------------- varios modelos y publicación
 def _zip_de_prueba(mid, ver, malicioso=False):
     ruta = empaquetar_version.empaquetar(D.REPO, D.MODELO_REPO, mid, ver, "prueba", "", TMP / f"{mid}_{ver}.zip")

@@ -32,7 +32,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from nexo_ia import auditor, bitacora, escaneo, ifc_modelo, llm, narrador, nube_io, parte_diario, sintetico
+from nexo_ia import (auditor, bitacora, consultas, costos, escaneo, exportar, ifc_modelo, llm, narrador, nube_io, parte_diario,
+                     simulacion, sintetico)
+from nexo_ia.metrado import guardar_registros, registrar, sumas  # noqa: F401  (se re-exportan: pruebas y scripts)
 from nexo_ia import datos as D
 
 AQUI = Path(__file__).resolve().parent
@@ -47,11 +49,7 @@ MAX_ZIP = int(os.environ.get("NEXO_MAX_MB", "200")) * 1024 * 1024
 MAX_NUBE = int(os.environ.get("NEXO_MAX_NUBE_MB", "400")) * 1024 * 1024
 ID_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
-_candados = defaultdict(threading.Lock)        # un candado por (modelo, uso): un modelo no bloquea a otro
-
-
-def candado(nombre):
-    return _candados[(D.actual().id, nombre)]
+candado = D.candado                          # un candado por (modelo, uso): un modelo no bloquea a otro
 
 
 # ---------------------------------------------------------------- emulación del complemento
@@ -69,84 +67,6 @@ def datos_actuales():
     return d
 
 
-def guardar_registros(o):
-    r = D.ruta_registros()
-    tmp = r.with_suffix(f".{threading.get_ident()}.tmp")
-    tmp.write_text(json.dumps(o, ensure_ascii=False, indent=1), encoding="utf-8")
-    tmp.replace(r)
-
-
-def sumas(reg):
-    d = {}
-    for _, it, q in D.parsear(reg):
-        d[it] = d.get(it, 0.0) + q
-    return d
-
-
-def registrar(ped):
-    """Port de Escritura.Registrar (C#) con las mismas validaciones."""
-    try:
-        f = datetime.strptime(ped.get("fecha", ""), "%Y-%m-%d")
-    except ValueError:
-        raise ValueError("Fecha no válida (aaaa-mm-dd).")
-    fs, fdmy = f.strftime("%Y-%m-%d"), f.strftime("%d/%m/%Y")
-    partidas, elems = D.partidas(), D.elementos()
-    con_elementos = {p["item"] for e in elems.values() for p in e["partidas"]}
-    aplicados, rechazados, alertas, tocados = [], [], [], set()
-    with candado("registros"):
-        reg = D.leer_registros()
-        E = reg["elementos"]
-        for r in ped.get("registros") or []:
-            rid, item = int(r.get("id") or 0), r.get("item") or ""
-            try:
-                q = float(r.get("cantidad"))
-            except (TypeError, ValueError):
-                q = 0.0
-            if q == 0 or q != q:
-                rechazados.append({"id": rid, "item": item, "motivo": "Cantidad 0 o no válida."}); continue
-            part = partidas.get(item)
-            if not part:
-                rechazados.append({"id": rid, "item": item, "motivo": "La partida no existe en el presupuesto."}); continue
-            und = part["und"]
-            if rid == 0:
-                if item in con_elementos:
-                    rechazados.append({"id": 0, "item": item, "motivo": "Esta partida tiene elementos: registra por elemento o por partida completa."}); continue
-                g = reg.get("global", "")
-                nuevo, contrato = sumas(g).get(item, 0.0) + q, part["metrado"]
-                if nuevo < -1e-9:
-                    rechazados.append({"id": 0, "item": item, "motivo": f"El acumulado quedaría negativo ({nuevo:.3f})."}); continue
-                reg["global"] = g + f"{fs}|{item}|{q!r};"
-                if nuevo > contrato * (1 + 1e-6) + 1e-9:
-                    alertas.append(f"{item}: acumulado {nuevo:.3f} {und} supera el contrato ({contrato:.3f} {und}).")
-                aplicados.append({"id": 0, "item": item, "cantidad": q, "acumulado": nuevo, "contrato": contrato}); continue
-            de = elems.get(rid)
-            if not de:
-                rechazados.append({"id": rid, "item": item, "motivo": "El elemento no está en los datos del cronograma."}); continue
-            pe = next((p for p in de["partidas"] if p["item"] == item), None)
-            if not pe:
-                rechazados.append({"id": rid, "item": item, "motivo": "Esa partida no corresponde a este elemento."}); continue
-            nodo = dict(E.get(str(rid)) or {"registro": "", "obs": ""})
-            nuevo, cont = sumas(nodo["registro"]).get(item, 0.0) + q, pe["metrado"]
-            if nuevo < -1e-9:
-                rechazados.append({"id": rid, "item": item, "motivo": f"El acumulado quedaría negativo ({nuevo:.3f})."}); continue
-            nodo["registro"] = nodo["registro"] + f"{fs}|{item}|{q!r};"
-            if nuevo > cont * (1 + 1e-6) + 1e-9:
-                msg = f"{fdmy} · mayor metrado {item}: acumulado {nuevo:.3f} {und} > contrato {cont:.3f} {und}"
-                alertas.append(f"Elemento {rid} ({de['tipo']}): {msg}")
-                nodo["obs"] = (nodo["obs"] + " | " if nodo.get("obs") else "") + msg
-            E[str(rid)] = nodo
-            tocados.add(rid)
-            aplicados.append({"id": rid, "item": item, "cantidad": q, "acumulado": nuevo, "contrato": cont})
-        simular = bool(ped.get("simular"))
-        if not simular and aplicados:
-            guardar_registros(reg)
-            bitacora.anotar("metrado", fecha=fs, n=len(aplicados), origen=ped.get("origen", "panel"), usuario=ped.get("_usuario"))
-        return {"ok": True, "simulado": simular, "guardado": not simular and bool(aplicados),
-                "aplicados": aplicados, "rechazados": rechazados, "alertas": alertas, "notas": [],
-                "elementos": [] if simular else [{"id": i, **E[str(i)]} for i in tocados],
-                "registroGlobal": reg.get("global", "")}
-
-
 # ---------------------------------------------------------------- IA (cachés por modelo)
 _aud = {}
 
@@ -155,7 +75,9 @@ def auditoria():
     """Se recalcula solo si cambian la versión de datos o los registros. Candado propio por modelo:
     mientras se audita, el resto del servidor (datos, 3D, otros modelos) sigue respondiendo."""
     m = D.actual()
-    clave = (m.version, m.huellas["version_datos"], D.ruta_registros().stat().st_mtime_ns)
+    ult = D.estado() / "escaneo_ultimo.json"
+    clave = (m.version, m.huellas["version_datos"], D.ruta_registros().stat().st_mtime_ns,
+             ult.stat().st_mtime_ns if ult.exists() else 0)
     with candado("auditoria"):
         c = _aud.get(m.id)
         if not c or c[0] != clave:
@@ -229,8 +151,9 @@ _llamadas = defaultdict(deque)
 _ll_lock = threading.Lock()
 
 
-def limitar(ip):
-    if not llm.disponible():
+def limitar(ip, pesado=False):
+    """Límite por IP para el LLM y, siempre, para lo que consume mucha CPU (escaneo, simulación)."""
+    if not (pesado or llm.disponible()):
         return
     ahora = time.time()
     with _ll_lock:
@@ -396,12 +319,32 @@ class Manejador(BaseHTTPRequestHandler):
             elif ruta == "/api/ia/escaneo/nube.bin":      # nube alineada para el visor (binario compacto)
                 self._enviar(200, escaneo.vista_binaria(), "application/octet-stream")
             elif ruta == "/api/ia/escaneo/nube.ply":      # la misma nube, con color, para CloudCompare / ReCap / Revit
-                tmp = D.estado() / "escaneo_vista.ply"
-                escaneo.vista_ply(tmp)
-                self._enviar(200, tmp.read_bytes(), "application/octet-stream",
+                self._enviar(200, escaneo.vista_ply_bytes(), "application/octet-stream",
                              extra={"Content-Disposition": f'attachment; filename="nube_alineada_{m.id}.ply"'})
             elif ruta == "/api/ia/bitacora":
-                self._enviar(200, {"ok": True, "eventos": bitacora.leer(min(int((q.get("n") or [200])[0]), 2000))})
+                self._enviar(200, {"ok": True, "eventos": bitacora.leer(min(int((q.get("n") or [200])[0]), 2000),
+                                                                       (q.get("tarea") or [None])[0])})
+            elif ruta == "/api/ia/escaneo/historial":
+                self._enviar(200, {"ok": True, "escaneos": escaneo.historial()})
+            elif ruta == "/api/ia/costos":                # costos y presupuesto (mismas fórmulas que el panel) + IA
+                corte = (q.get("corte") or [None])[0]
+                self._enviar(200, {"ok": True, **costos.resumen(corte[:10] if corte else None,
+                                                               escaneo_ultimo=escaneo.ultimo(), auditoria=auditoria())})
+            elif ruta == "/api/ia/costos/modelo":         # BIM 5D: partida por partida, cuánto sale del modelo
+                self._enviar(200, {"ok": True, **costos.desde_modelo(), "cambio_version": costos.cambio_version()})
+            elif ruta in ("/api/ia/simulacion/etapas", "/api/ia/simulacion/etapas.bin"):   # la obra construyéndose (solo memoria)
+                corte = ((q.get("corte") or [""])[0][:10]) or None
+                if not simulacion._nubes:
+                    limitar(self.ip(), pesado=True)
+                with candado("simulacion"):
+                    meta, binario = simulacion.etapas(corte, int((q.get("semilla") or [7])[0]))
+                if ruta.endswith(".bin"):
+                    self._enviar(200, binario, "application/octet-stream")
+                else:
+                    self._enviar(200, meta)
+            elif ruta == "/api/ia/export/powerbi.zip":
+                self._enviar(200, exportar.zip_powerbi(auditoria()), "application/zip", extra={
+                    "Content-Disposition": f'attachment; filename="nexo_powerbi_{m.id}-{m.version}.zip"'})
             elif ruta == "/api/ia/bitacora.jsonl":
                 p = bitacora.ruta()
                 self._enviar(200, p.read_bytes() if p.exists() else b"", "application/x-ndjson; charset=utf-8",
@@ -444,7 +387,7 @@ class Manejador(BaseHTTPRequestHandler):
                 return
             if ruta == "/api/ia/escaneo/subir":           # cuerpo = archivo de nube (.ply/.las/.laz/.xyz/.pts) tal cual
                 self.exigir_escritura()
-                limitar(self.ip())
+                limitar(self.ip(), pesado=True)
                 if n > MAX_NUBE:
                     raise ValueError(f"La nube supera {MAX_NUBE // 2**20} MB: submuestréala (p. ej. 3-5 cm) en CloudCompare o WebODM")
                 self.elegir_modelo(q)
@@ -474,9 +417,13 @@ class Manejador(BaseHTTPRequestHandler):
                                      motivo=(ped.get("motivo") or "")[:500], usuario=(ped.get("usuario") or "anónimo")[:80],
                                      ip=self.ip(), impacto_soles=h["impacto_soles"])
                 self._enviar(200, {"ok": True, "evento": ev})
+            elif ruta == "/api/ia/simulacion":           # SOLO SIMULACIÓN: no escribe nada (permitida en solo lectura)
+                limitar(self.ip(), pesado=True)
+                with candado("simulacion"):
+                    self._enviar(200, simulacion.simular((str(ped.get("corte") or "")[:10] or None), int(ped.get("semilla", 7))))
             elif ruta == "/api/ia/escaneo/demo":         # nube sintética con verdad conocida, generada desde el modelo
                 self.exigir_escritura()
-                limitar(self.ip())
+                limitar(self.ip(), pesado=True)
                 fecha = str(ped.get("fecha") or "2027-06-30")[:10]
                 with candado("escaneo"):
                     con_ifc = bool(ped.get("desde_ifc")) and ifc_modelo.georef() is not None
@@ -487,9 +434,16 @@ class Manejador(BaseHTTPRequestHandler):
                     nube_io.escribir_ply(D.estado() / "nube_simulada.ply", nube, rgb)
                     nombre = f"sintética {fecha} desde {'el IFC, en coordenadas UTM' if con_ifc else 'el modelo del panel'} (semilla {verdad['semilla']})"
                     self._enviar(200, escaneo.procesar(nube, fecha, nombre, verdad=verdad, rgb=rgb))
-            elif ruta == "/api/ia/parte":
-                limitar(self.ip())
-                self._enviar(200, {"ok": True, **parte_diario.procesar(str(ped.get("texto", ""))[:2000], ped.get("fecha"))})
+            elif ruta == "/api/ia/parte":                # chat del parte diario: registra trabajos o responde de costos
+                texto = str(ped.get("texto", ""))[:2000]
+                if consultas.es_pregunta(texto):
+                    corte = (str(ped.get("corte") or "")[:10] or None)
+                    r = consultas.responder(texto, corte, escaneo.ultimo(), auditoria())
+                    bitacora.anotar("consulta", texto=texto, tema=r["tema"], corte=r["corte"], usuario=self.ip())
+                    self._enviar(200, {"ok": True, **r})
+                else:
+                    limitar(self.ip())
+                    self._enviar(200, {"ok": True, "tipo": "parte", **parte_diario.procesar(texto, ped.get("fecha"))})
             else:
                 self._enviar(404, {"ok": False, "error": f"No existe POST {u.path}"})
         except Exception as ex:          # noqa: BLE001

@@ -10,8 +10,11 @@ Soporta **varias obras y versiones de modelo**, y se puede publicar como link (P
 cd nexo-ia
 pip3 install -r requirements.txt
 python3 servidor.py                      # → http://127.0.0.1:8770
-python3 pruebas/test_ia.py               # 10 pruebas (usa carpetas temporales)
-python3 pruebas/evaluar_parte_diario.py  # precisión del parte diario asistido
+python3 pruebas/test_ia.py               # 13 pruebas (usa carpetas temporales)
+python3 pruebas/test_costos.py           # costos = panel, alertas del dron, simulación sin escritura, Power BI
+python3 pruebas/test_escaneo.py          # avance por dron
+python3 pruebas/humo_demo.py             # la cadena completa por HTTP, como en la demo (≈1 min)
+python3 pruebas/evaluar_parte_diario.py  # precisión del parte diario asistido (17/17)
 ```
 Si el repo está en otra ruta: `NEXO_REPO=/ruta/a/BIM-IA python3 servidor.py`. Para reiniciar la demo: borrar `estado/`.
 
@@ -75,6 +78,29 @@ NEXO_LLM=openai   OPENAI_API_KEY=… NEXO_LLM_MODELO=gpt-4o-mini python3 servido
 NEXO_LLM=anthropic ANTHROPIC_API_KEY=… python3 servidor.py
 ```
 
+## Costos y presupuesto (el foco)  · `costos.py`, `consultas.py`, `simulacion.py`, `exportar.py`
+
+Todo termina en soles, con **las mismas fórmulas que el panel** (verificado contra `pvA()` del panel ejecutado en node):
+
+| Concepto | Fórmula |
+|---|---|
+| Presupuesto (BAC) | Σ r2(metrado × P.U.) · + GG 12 % + utilidad 8 % → + IGV 18 % (redondeo S10 de `totalVz`) |
+| Valorizado (EV) | metrado registrado × P.U. |
+| Programado (PV) | Σ monto de cada actividad × días laborables hechos / duración (lunes a sábado, sin feriados) |
+| SPI | EV / PV |
+| Confirmado por dron | valorizado en elementos que el último vuelo ve construidos |
+| **En riesgo** | valorizado en elementos que el dron **no** ve (posible cobro sin ejecución) → hallazgo **D01** en el auditor |
+| Por valorizar | visto por el dron y sin registrar (propuesta) |
+| **Neto recomendado** | EV − en riesgo − hallazgos aceptados |
+| BIM 5D | qué % del costo directo sale de elementos del modelo; diferencia de presupuesto entre versiones publicadas |
+
+- **Valorizaciones › «Costos y presupuesto»**: montos grandes, barra (confirmado · sin verificar · en riesgo · marca de programado), pirámide CD → GG → UT → IGV y tabla por capítulo. El semáforo muestra los S/ en observación.
+- **▶ Simular flujo paso a paso** (Valorizaciones o Avance por dron): **solo simulación, no guarda nada** (ni registros, ni escaneo, ni bitácora; probado). 7 pasos: vuelo → nube → elementos → partidas → metrado validado como el complemento → S/ (CD, GG, UT, IGV) → alertas (dron + auditor) → valorización antes/después. `POST /api/ia/simulacion {corte}`.
+  En el paso 1, **la obra construyéndose**: el edificio completo aparece punto a punto, del primer vaciado al último techo, según la fecha programada de cada elemento. Controles: ▶ Reproducir, deslizador de fecha, color por fecha (con leyenda) o color del concreto. La animación se detiene en el corte, donde vuela el dron, y luego sigue como proyección del cronograma. Muestra el valor de lo construido en S/ (CD y con GG, UT e IGV) frente a lo programado. Sin grúa, material ni vecinos; el terreno se puede activar. Se genera solo en memoria: `GET /api/ia/simulacion/etapas?corte=` (datos) y `…/etapas.bin` (puntos).
+- **Chat del parte diario**: entiende «3er piso», «segundo piso», «lado A», zapatas sin nivel; si falta algo dice qué y sugiere frases que sí se registran. Responde preguntas de costos («¿cuánto llevamos valorizado?», «¿vamos atrasados?», «saldo de la 04.05.01», «¿cuánto hay en riesgo?») con cifras deterministas.
+- **Power BI**: `GET /api/ia/export/powerbi.zip` (también en Configuración › Trazabilidad): CSV en esquema estrella + `LEEME_PowerBI.md` con relaciones y medidas DAX.
+- Rutas: `GET /api/ia/costos?corte=`, `GET /api/ia/costos/modelo`, `GET /api/ia/escaneo/historial`, `GET /api/ia/bitacora?tarea=`.
+
 ## Las tres capas de IA (la IA nunca produce el número final)
 
 1. **Reglas** (`nexo_ia/auditor.py`), cada hallazgo con fuente, fórmula y valores:
@@ -85,6 +111,7 @@ NEXO_LLM=anthropic ANTHROPIC_API_KEY=… python3 servidor.py
    - R04b falsas alarmas por coma flotante del complemento
    - R05 secuencia constructiva
    - R06 P.U. incoherente con el f'c
+   - D01 registrado y no visto por el dron (S/ en riesgo) · D02 construido sin soporte visible
 2. **ML** (`nexo_ia/ml.py`): RandomForest que aprende la geometría de cada grupo sin leer el nombre del tipo.
    Validación cruzada, exactitud 97 %. Se entrena una vez por versión publicada y queda en caché.
 3. **LLM** (`narrador.py`, `parte_diario.py`):

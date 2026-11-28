@@ -87,6 +87,14 @@ def plantilla(h):
     if r == "ML1":
         return {"observacion": f"Sospecha: por su geometría (lados {v['lado_menor_m']} × {v['lado_mayor_m']} m) el modelo lo reconoce como {v['grupo_sugerido']} con probabilidad {v['probabilidad']}.",
                 "accion": "Revisar la clasificación del tipo en Revit y la partida asignada.", "responsable": "Ingeniero estructural", "afecta_valorizacion": True}
+    if r == "D01":
+        return {"observacion": f"El elemento tiene S/ {v['monto_registrado']:,.2f} de metrado registrado, pero en el escaneo del {v['fecha_escaneo']} "
+                               f"el dron lo ve {'ausente' if v['estado_dron'] == 'no_construido' else 'solo en parte'}: no debe valorizarse sin verificar.",
+                "accion": "Verificar en obra (foto o wincha) antes de cerrar la valorización; si no está ejecutado, anular el registro.",
+                "responsable": "Supervisión", "afecta_valorizacion": True}
+    if r == "D02":
+        return {"observacion": "El dron ve construido un elemento cuyo apoyo no aparece en la nube: o el apoyo existe y no se vio, o hay un error de registro.",
+                "accion": "Revisar en el visor de la nube y confirmar el estado del apoyo en obra.", "responsable": "Residente de obra", "afecta_valorizacion": False}
     return {"observacion": h["titulo"], "accion": "Revisar.", "responsable": "Supervisión", "afecta_valorizacion": False}
 
 

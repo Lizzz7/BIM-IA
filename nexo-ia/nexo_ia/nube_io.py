@@ -144,9 +144,12 @@ def escribir_ply(ruta, xyz: np.ndarray, rgb: np.ndarray = None, doble=None):
     if rgb is not None:
         rgb = np.asarray(rgb, "u1")
         a["r"], a["g"], a["b"] = rgb[:, 0], rgb[:, 1], rgb[:, 2]
+    datos = ("\n".join(cab + ["end_header"]) + "\n").encode("ascii") + a.tobytes()
+    if hasattr(ruta, "write"):                       # también acepta un archivo abierto / BytesIO
+        ruta.write(datos)
+        return
     with open(ruta, "wb") as f:
-        f.write(("\n".join(cab + ["end_header"]) + "\n").encode("ascii"))
-        f.write(a.tobytes())
+        f.write(datos)
 
 
 def submuestrear(xyz: np.ndarray, voxel: float) -> np.ndarray:

@@ -74,10 +74,79 @@ PAL_GRUPO = [(r"columna", ["COL"]), (r"placa", ["PLA"]), (r"muro", ["MUR"]), (r"
 PAL_CLASE = [(r"vaci|concret", "concreto"), (r"encofr", "encofrado"), (r"acero|fierro|armad|habilit", "acero"), (r"ladrillo", "ladrillo")]
 
 
+ORDINALES = {"primer": 1, "primero": 1, "segundo": 2, "tercer": 3, "tercero": 3, "cuarto": 4, "quinto": 5, "sexto": 6,
+             "septimo": 7, "setimo": 7, "octavo": 8, "noveno": 9, "decimo": 10}
+NOMBRE_EN_TEXTO = {"COL": "columnas", "PLA": "placas", "MUR": "muros", "VIG": "vigas", "VCH": "viguetas", "ALI": "losa aligerada",
+                   "LMA": "losa maciza", "ESC": "escalera", "ZAP": "zapatas", "CIMM": "cimientos", "LOSC": "losa de cimentacion",
+                   "RAM": "rampa", "ALB": "muros de albanileria", "SUBZ": "subzapatas"}
+VERBO = {"concreto": "Vaciado de", "encofrado": "Encofrado de", "acero": "Acero de", "ladrillo": "Ladrillo de", "muro": "Asentado de"}
+
+
+def normalizar(t):
+    """Cómo se habla en obra -> forma que entienden las reglas: «3er piso», «segundo piso», «lado A», «piso tercero»."""
+    t = _norm(t)
+    t = re.sub(r"\b(\d{1,2})\s*(?:er|ro|do|to|mo|vo|no|avo|°|º|\.?o)\b", r"\1", t)
+    t = re.sub(r"\b(" + "|".join(ORDINALES) + r")\b", lambda m: str(ORDINALES[m.group(1)]), t)
+    t = re.sub(r"\b(\d{1,2})\s+(?:piso|nivel)\b", r"piso \1", t)
+    t = re.sub(r"\b(?:piso|nivel)\s+(\d{1,2})\b", r"piso \1", t)
+    t = re.sub(r"\b(?:lado|zona|frente)\s+([ab])\b", r"sector \1", t)
+    return t
+
+
+def _lugar(p):
+    """Texto del nivel de un paquete, que las propias reglas vuelven a entender ('piso 2', 'semisotano', 'sotano 1')."""
+    n = _norm(p.get("nivel_verticales") or "").upper()
+    m = re.match(r"0?(\d+)\. NFP", n)
+    if m:
+        return f"del piso {int(m.group(1))}"
+    if "SEMISOTANO" in n:
+        return "del semisotano"
+    m = re.search(r"SOTANO (\d)", n)
+    return f"del sotano {m.group(1)}" if m else ""
+
+
+def _paquete_sin_nivel(grupos, paq):
+    """Cimentaciones y anillos de muros no tienen 'piso': si solo un paquete sin nivel tiene esos grupos, es ese."""
+    c = [p["id"] for p in paq.values() if not p["nivel_verticales"] and set(grupos) & set(p["grupos"])]
+    return c[0] if len(c) == 1 else None
+
+
+def _sugerir(frase, pid, clases, grupos, paq):
+    """Hasta 3 frases completas que sí se pueden registrar, armadas con el catálogo del modelo."""
+    sector = re.search(r"sector ([ab])\b", frase)
+    sec = f" sector {sector.group(1).upper()}" if sector else ""
+    out = []
+    if grupos and not clases:
+        cands = [pid] if pid else [p for p in paq if set(grupos) & set(paq[p]["grupos"])][:1]
+        for c in ("concreto", "encofrado", "acero"):
+            for q in cands:
+                gs = [g for g in grupos if g in paq[q]["grupos"]]
+                if gs:
+                    out.append(f"{VERBO[c]} {' y '.join(NOMBRE_EN_TEXTO.get(g, g) for g in gs)} {_lugar(paq[q])}{sec}".replace("  ", " ").strip())
+    elif grupos and clases and not pid:
+        for q in [p for p in paq if set(grupos) & set(paq[p]["grupos"]) and paq[p]["nivel_verticales"]][:3]:
+            out.append(f"{VERBO[clases[0]]} {' y '.join(NOMBRE_EN_TEXTO.get(g, g) for g in grupos if g in paq[q]['grupos'])} {_lugar(paq[q])}{sec}")
+    elif pid and clases and not grupos:
+        for g in [g for g in paq[pid]["grupos"] if g in ("COL", "PLA", "VIG", "ALI")][:3]:
+            out.append(f"{VERBO[clases[0]]} {NOMBRE_EN_TEXTO[g]} {_lugar(paq[pid])}{sec}")
+    return [x[0].upper() + x[1:] for x in out[:3]]
+
+
+def _falta(pid, clases, grupos):
+    f = []
+    if not clases:
+        f.append("qué trabajo (vaciado, encofrado, acero, ladrillo)")
+    if not grupos:
+        f.append("qué elementos (columnas, placas, vigas, losa…)")
+    if not pid:
+        f.append("en qué nivel (p. ej. «piso 3», «semisótano»)")
+    return f
+
+
 def interpretar_reglas(texto):
-    t = _norm(texto)
+    t = normalizar(texto)
     paq = {p["id"]: p for p in catalogo()["paquetes"]}
-    trabajos, dudas = [], []
+    trabajos, dudas, sugerencias = [], [], []
     for frase in re.split(r"[.;\n]| y se | ademas ", t):
         if not frase.strip():
             continue
@@ -86,9 +155,16 @@ def interpretar_reglas(texto):
         pid = _paquete_por_nivel(frase, paq)
         if pid and not grupos and re.search(r"\btecho\b|\blosa\b", frase):   # "techo" sin más = todo lo horizontal
             grupos = [g for g in paq[pid]["grupos"] if g not in VERTICALES]
+        if not pid and grupos:
+            pid = _paquete_sin_nivel(grupos, paq)
         if not (pid and clases and grupos):
-            if frase.strip():
-                dudas.append(f"No entendí: «{frase.strip()}»")
+            if not (clases or grupos or pid):
+                if re.search(r"llovi|no se trabaj|paraliz|feriado|descanso", frase):
+                    continue                                         # sin trabajo: nada que registrar ni preguntar
+                dudas.append(f"No encontré trabajos en «{frase.strip()}»")
+            else:
+                dudas.append(f"En «{frase.strip()}» falta " + " y ".join(_falta(pid, clases, grupos)))
+                sugerencias += _sugerir(frase, pid, clases, grupos, paq)
             continue
         sec = re.search(r"sector ([ab])\b", frase)
         pct = re.search(r"(\d{1,3})\s*%", frase)
@@ -97,7 +173,7 @@ def interpretar_reglas(texto):
             trabajos.append({"paquete": pid, "sector": sec.group(1).upper() if sec else "ambos",
                              "grupos": sorted(set(g for g in grupos if g in paq[pid]["grupos"])), "clase": c,
                              "porcentaje": porcentaje, "texto_origen": frase.strip()})
-    return {"trabajos": [x for x in trabajos if x["grupos"]], "dudas": dudas}
+    return {"trabajos": [x for x in trabajos if x["grupos"]], "dudas": dudas, "sugerencias": list(dict.fromkeys(sugerencias))[:3]}
 
 
 def _paquete_por_nivel(frase, paq):
@@ -149,6 +225,10 @@ def resolver(intencion):
             "monto_total": round(sum(p["monto"] for r in resumen for p in r["partidas"]), 2)}
 
 
+def res_vacio(intencion):
+    return not intencion.get("trabajos")
+
+
 def procesar(texto, fecha=None, usar_llm=True):
     fecha = fecha or date.today().isoformat()
     meta = {"proveedor": "reglas", "modelo": "reglas"}
@@ -178,6 +258,7 @@ def procesar(texto, fecha=None, usar_llm=True):
     else:
         intencion = interpretar_reglas(texto)
     res = resolver(intencion)
+    intencion.setdefault("sugerencias", interpretar_reglas(texto).get("sugerencias", []) if res_vacio(intencion) else [])
     out = {"fecha": fecha, "texto": texto, "origen": origen, "proveedor": meta.get("proveedor"), "modelo": meta.get("modelo"),
            "intencion": intencion, **res, "version_datos": D.huellas()["version_datos"]}
     bitacora.anotar("parte_diario", texto=texto, fecha=fecha, origen=origen, proveedor=meta.get("proveedor"),

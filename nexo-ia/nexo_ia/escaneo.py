@@ -13,9 +13,10 @@
 Todo es determinista (geometría + reglas). Nada se registra solo: la salida tiene el mismo formato que
 parte_diario.resolver() y pasa por POST /api/metrado {simular:true} antes de registrar.
 """
+import contextvars
 import json
 import time
-from datetime import date
+from datetime import date, datetime
 
 import numpy as np
 from scipy.spatial import cKDTree
@@ -430,7 +431,11 @@ def vista_ply(ruta):
 
 
 # ---------------------------------------------------------------- punto de entrada
-def procesar(nube, fecha=None, nombre="nube", verdad=None, alinear=True, rgb=None):
+_ultimo_sim = contextvars.ContextVar("escaneo_simulado", default=None)   # la simulación lo fija; nada va a disco
+
+
+def procesar(nube, fecha=None, nombre="nube", verdad=None, alinear=True, rgb=None, guardar=True):
+    """guardar=False: no escribe nada (ni vista, ni último, ni historial, ni bitácora). Lo usa la simulación."""
     fecha = fecha or date.today().isoformat()
     nube = np.asarray(nube, float)
     ref = referencia()
@@ -441,7 +446,7 @@ def procesar(nube, fecha=None, nombre="nube", verdad=None, alinear=True, rgb=Non
     comp["alineacion"]["georreferencia"] = georref
     if comp["alineacion"].get("aplicada"):
         nube = aplicar(np.array(comp["alineacion"]["T"]), nube)
-    vista = guardar_vista(nube, rgb, comp)
+    vista = guardar_vista(nube, rgb, comp) if guardar else {"puntos_vista": 0, "simulado": True}
     prop = proponer(comp, fecha)
     comp["_alertas_ids"] = [a["id"] for a in prop["alertas_valorizacion"]]
     out = {"ok": True, "nombre": nombre, "fecha": fecha, "version_datos": D.huellas()["version_datos"],
@@ -451,7 +456,11 @@ def procesar(nube, fecha=None, nombre="nube", verdad=None, alinear=True, rgb=Non
     if verdad:
         out["metricas"] = metricas(comp, verdad)
         out["verdad"] = {k: v for k, v in verdad.items() if k not in ("construidos",)}
+    if not guardar:
+        out["simulado"] = True
+        return out
     (D.estado() / "escaneo_ultimo.json").write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
+    _guardar_historial(out)
     bitacora.anotar("escaneo", nombre=nombre, fecha=fecha, puntos=comp["parametros"]["puntos_nube"],
                     conteo=out["avance"]["conteo"], avance_pct=out["avance"]["total"]["avance_pct"],
                     monto_propuesto=prop["monto_total"], alertas=len(prop["alertas_valorizacion"]),
@@ -459,6 +468,38 @@ def procesar(nube, fecha=None, nombre="nube", verdad=None, alinear=True, rgb=Non
     return out
 
 
+def _guardar_historial(out):
+    """Resumen de cada escaneo (sin la lista de elementos) en estado/<obra>/escaneos/: curva de avance en el tiempo."""
+    d = D.estado() / "escaneos"
+    d.mkdir(parents=True, exist_ok=True)
+    res = {"fecha": out["fecha"], "nombre": out["nombre"], "procesado": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+           "version_datos": out["version_datos"], "avance": {"total": out["avance"]["total"], "conteo": out["avance"]["conteo"]},
+           "monto_propuesto": out["monto_total"], "monto_inferidos": out["monto_inferidos"],
+           "alertas": [{"id": a["id"], "monto_registrado": a["monto_registrado"], "severidad": a["severidad"]} for a in out["alertas_valorizacion"]],
+           "rmse_m": out["alineacion"].get("rmse_m"), "exactitud": (out.get("metricas") or {}).get("exactitud")}
+    (d / f"{out['fecha']}_{datetime.now().strftime('%H%M%S%f')}.json").write_text(json.dumps(res, ensure_ascii=False), encoding="utf-8")
+
+
+def historial():
+    d = D.estado() / "escaneos"
+    if not d.exists():
+        return []
+    return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(d.glob("*.json"))]
+
+
 def ultimo():
+    sim = _ultimo_sim.get()
+    if sim is not None:
+        return sim
     p = D.estado() / "escaneo_ultimo.json"
     return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+
+
+def vista_ply_bytes():
+    import io
+    z = np.load(D.estado() / "escaneo_nube.npz") if (D.estado() / "escaneo_nube.npz").exists() else None
+    if z is None:
+        raise LookupError("Todavía no hay una nube procesada para este modelo")
+    b = io.BytesIO()
+    nube_io.escribir_ply(b, z["xyz"], z["rgb"])
+    return b.getvalue()

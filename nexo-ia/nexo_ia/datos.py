@@ -262,7 +262,45 @@ def elementos():                  return actual().elementos             # noqa: 
 def ruta_registros() -> Path:     return actual().ruta_registros()      # noqa: E704
 
 
+# ---------------------------------------------------------------- candados y modo simulación
+_candados = {}
+_candados_lock = threading.Lock()
+
+
+def candado(nombre) -> threading.Lock:
+    """Un candado por (modelo, uso): un modelo no bloquea a otro."""
+    k = (actual().id, nombre)
+    with _candados_lock:
+        return _candados.setdefault(k, threading.Lock())
+
+
+# Registros SIMULADOS: mientras está activo (contextvar, solo en este hilo/petición), leer_registros() devuelve
+# una copia en memoria y nada se escribe a disco. Lo usa la simulación paso a paso.
+_reg_sim = contextvars.ContextVar("registros_simulados", default=None)
+
+
+class simulando:
+    """with D.simulando(reg): ...  -> todo lo que lea registros ve `reg` (copia), sin tocar registros.json."""
+
+    def __init__(self, reg):
+        self.reg = json.loads(json.dumps(reg))
+
+    def __enter__(self):
+        self._tok = _reg_sim.set(self.reg)
+        return self.reg
+
+    def __exit__(self, *a):
+        _reg_sim.reset(self._tok)
+
+
+def en_simulacion() -> bool:
+    return _reg_sim.get() is not None
+
+
 def leer_registros() -> dict:
+    sim = _reg_sim.get()
+    if sim is not None:
+        return json.loads(json.dumps(sim))
     o = json.loads(ruta_registros().read_text(encoding="utf-8"))
     o.setdefault("elementos", {})
     o.setdefault("global", "")
