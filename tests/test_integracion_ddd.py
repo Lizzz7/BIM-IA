@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ))
@@ -91,6 +92,16 @@ class PresupuestoTests(unittest.TestCase):
             self.assertEqual(antes,(Path(tmp)/(i+".json")).read_bytes())
             self.assertNotEqual(i,repo.guardar({**p,"importe":124}))
 
+    def test_cotizacion_con_base_obsoleta_no_se_confirma(self):
+        from nexo.modulos.presupuestos.aplicacion.casos_uso.actualizar_cotizacion import ejecutar
+        class Catalogo:
+            def leer(self, _):
+                return {**presupuesto(),"fuente":{"sha256":"nueva"}}
+        with self.assertRaisesRegex(ValueError,"cambió"):
+            ejecutar(Catalogo(),{"codigo":"02","precio":"4","unidad":"bol","fuente":"Oferta",
+                                 "fecha":"2026-11-28","incluye_igv":False,"tasa_igv":"0.18",
+                                 "alcance":"Mismo alcance","base_sha256":"anterior"})
+
     def test_excel_actual_y_comparacion_real(self):
         from nexo_ia import datos as D
         m=D._modelo_del_repo()
@@ -139,6 +150,37 @@ class AvancesTests(unittest.TestCase):
                     self.assertFalse(any(t in (n.module or "") for t in ("infraestructura","nexo_ia","openpyxl","ifcopenshell","http")),str(p))
                 if isinstance(n,ast.Import):
                     self.assertFalse(any(a.name in ("sqlite3","requests","openpyxl","ifcopenshell") for a in n.names),str(p))
+
+
+class EvidenciaTests(unittest.TestCase):
+    def comp(self, confiable=True):
+        return {"alineacion":{"confiable":confiable}, "elementos":[
+            {"id":1,"estado":"construido","grupo":"COL","nivel":"Piso 1","visible":1,"cobertura_visible":1}]}
+
+    def test_nube_propone_solo_concreto_y_no_futuros(self):
+        from nexo_ia import escaneo, datos as D
+        el={1:{"id":1,"grupo":"COL","nivel":"Piso 1","partidas":[
+            {"item":"c","clase":"concreto","metrado":10},{"item":"a","clase":"acero","metrado":100}]}}
+        with patch.object(D,"elementos",return_value=el), patch.object(D,"partidas",return_value={
+            "c":{"desc":"Concreto","und":"m3","pu":300},"a":{"desc":"Acero","und":"kg","pu":5}}), \
+                patch.object(D,"ejecutado_por_elemento",return_value={}) as ejecutado:
+            r=escaneo.proponer(self.comp(),"2027-03-20")
+            self.assertEqual([x["item"] for x in r["registros"]],["c"])
+            ejecutado.assert_called_with(hasta="2027-03-20")
+            r=escaneo.proponer(self.comp(False),"2027-03-20")
+            self.assertEqual(r["registros"],[])
+            self.assertTrue(r["problemas"])
+
+    def test_observado_e_inferido_separados(self):
+        from nexo_ia import escaneo, datos as D
+        with patch.object(D,"datos_base",return_value={"niveles":[{"nombre":"Piso 1","cota":0}]}):
+            r=escaneo.avance({"elementos":[
+                {"estado":"construido","nivel":"Piso 1","concreto_m3":3},
+                {"estado":"inferido","nivel":"Piso 1","concreto_m3":2},
+                {"estado":"no_observable","nivel":"Piso 1","concreto_m3":5}]})
+            self.assertEqual(r["total"]["observado_pct"],30)
+            self.assertEqual(r["total"]["inferido_pct"],20)
+            self.assertEqual(r["total"]["avance_pct"],50)
 
 
 if __name__=="__main__":

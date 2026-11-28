@@ -177,6 +177,8 @@ def a_modelo_si_hace_falta(nube, centro_modelo, radio_modelo):
     if not g:
         raise ValueError(f"La nube está a {lejos/1000:.1f} km del modelo: parece estar en UTM o coordenadas compartidas. "
                          "Carga el IFC del proyecto (exportado de Revit con coordenadas compartidas) para convertirla.")
+    if g.get("version_datos") != D.huellas()["version_datos"]:
+        raise ValueError("La georreferencia IFC corresponde a otra versión. Vuelve a cargar el IFC antes de convertir la nube.")
     T = np.array(g["T_ifc_a_modelo"])
     return nube @ T[:3, :3].T + T[:3, 3], {"origen": "georreferencia del IFC", "archivo": g.get("archivo"),
                                            "giro_grados": g["giro_grados"], "distancia_original_km": round(lejos / 1000, 2)}

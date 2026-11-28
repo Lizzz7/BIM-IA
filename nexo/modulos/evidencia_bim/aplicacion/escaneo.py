@@ -24,6 +24,7 @@ from scipy.spatial import cKDTree
 from nexo_ia import bitacora, nube_io
 from nexo_ia import datos as D
 from nexo_ia.ml import NOMBRES_GRUPO
+from nexo.modulos.evidencia_bim.dominio.reglas import validar_fecha, puede_proponer, partidas_observables
 
 ESPACIADO_REF = 0.12        # m entre puntos de referencia sobre el modelo
 TOL = 0.10                  # m: un punto "toca" el elemento si está a menos de esto
@@ -288,8 +289,9 @@ def comparar(nube, tol=TOL, alinear=True):
 
 # ---------------------------------------------------------------- cruce con registros y propuesta
 def proponer(comp, fecha):
+    validar_fecha(fecha)
     E, part = D.elementos(), D.partidas()
-    ej = D.ejecutado_por_elemento()
+    ej = D.ejecutado_por_elemento(hasta=fecha)
     registros, inferidos, alertas = [], [], []
     for f in comp["elementos"]:
         e = E[f["id"]]
@@ -299,7 +301,7 @@ def proponer(comp, fecha):
         f["registrado"] = registrado
         if f["estado"] in ("construido", "inferido") and not registrado:
             destino = registros if f["estado"] == "construido" else inferidos
-            for p in e["partidas"]:
+            for p in partidas_observables(e["partidas"]):
                 saldo = round(p["metrado"] - hecho.get(p["item"], 0.0), 6)
                 if saldo > 1e-9:
                     destino.append({"id": f["id"], "item": p["item"], "cantidad": saldo})
@@ -329,27 +331,40 @@ def proponer(comp, fecha):
                                       "monto": round(q * part[i]["pu"], 2)} for i, q in sorted(g["por_item"].items()) if i in part]})
         return out
 
-    res_m, res_i = resumir(registros, "medido por el dron"), resumir(inferidos, "inferido por secuencia constructiva")
+    problemas = []
+    if not puede_proponer(comp.get("alineacion", {})):
+        registros, inferidos, alertas = [], [], []
+        problemas.append("Alineación no confiable: vista disponible, propuestas y alertas económicas bloqueadas.")
+    res_m, res_i = resumir(registros, "evidencia superficial de concreto; cantidad del BIM"), resumir(inferidos, "inferido, requiere verificación independiente")
     return {"fecha": fecha, "registros": registros, "registros_inferidos": inferidos, "resumen": res_m, "resumen_inferidos": res_i,
             "monto_total": round(sum(p["monto"] for r in res_m for p in r["partidas"]), 2),
             "monto_inferidos": round(sum(p["monto"] for r in res_i for p in r["partidas"]), 2),
-            "alertas_valorizacion": sorted(alertas, key=lambda a: (a["severidad"] != "alta", -a["monto_registrado"])), "problemas": []}
+            "alertas_valorizacion": sorted(alertas, key=lambda a: (a["severidad"] != "alta", -a["monto_registrado"])),
+            "problemas": problemas,
+            "limite_evidencia": "La cantidad propuesta procede del BIM. La nube no mide acero oculto, "
+                               "no acredita todas las actividades ni autoriza pagos."}
 
 
 def avance(comp):
     """Avance físico por volumen de concreto, total y por nivel."""
     niveles = {}
-    tot = {"total_m3": 0.0, "construido_m3": 0.0}
+    tot = {"total_m3": 0.0, "construido_m3": 0.0, "observado_m3": 0.0, "inferido_m3": 0.0}
     for f in comp["elementos"]:
-        n = niveles.setdefault(f["nivel"], {"nivel": f["nivel"], **{s: 0 for s in ESTADOS}, "total_m3": 0.0, "construido_m3": 0.0})
+        n = niveles.setdefault(f["nivel"], {"nivel": f["nivel"], **{s: 0 for s in ESTADOS},
+                                          "total_m3": 0.0, "construido_m3": 0.0, "observado_m3": 0.0, "inferido_m3": 0.0})
         n[f["estado"]] += 1
         n["total_m3"] += f["concreto_m3"]; tot["total_m3"] += f["concreto_m3"]
         if f["estado"] in ("construido", "inferido"):
             n["construido_m3"] += f["concreto_m3"]; tot["construido_m3"] += f["concreto_m3"]
+            campo = "observado_m3" if f["estado"] == "construido" else "inferido_m3"
+            n[campo] += f["concreto_m3"]; tot[campo] += f["concreto_m3"]
     cotas = {x["nombre"]: x["cota"] for x in D.datos_base()["niveles"]}
     filas = sorted(niveles.values(), key=lambda x: cotas.get(x["nivel"], 0))
     for x in filas + [tot]:
         x["avance_pct"] = round(100 * x["construido_m3"] / x["total_m3"], 1) if x["total_m3"] else 0.0
+        for campo in ("observado", "inferido"):
+            x[campo + "_pct"] = round(100 * x[campo + "_m3"] / x["total_m3"], 1) if x["total_m3"] else 0.0
+            x[campo + "_m3"] = round(x[campo + "_m3"], 2)
         x["total_m3"], x["construido_m3"] = round(x["total_m3"], 2), round(x["construido_m3"], 2)
     conteo = {s: sum(f["estado"] == s for f in comp["elementos"]) for s in ESTADOS}
     return {"total": tot, "por_nivel": filas, "conteo": conteo}
@@ -436,8 +451,10 @@ _ultimo_sim = contextvars.ContextVar("escaneo_simulado", default=None)   # la si
 
 def procesar(nube, fecha=None, nombre="nube", verdad=None, alinear=True, rgb=None, guardar=True):
     """guardar=False: no escribe nada (ni vista, ni último, ni historial, ni bitácora). Lo usa la simulación."""
-    fecha = fecha or date.today().isoformat()
+    fecha = validar_fecha(fecha or date.today().isoformat())
     nube = np.asarray(nube, float)
+    if nube.ndim != 2 or nube.shape[1] != 3 or not np.isfinite(nube).all():
+        raise ValueError("La nube debe contener coordenadas XYZ finitas.")
     ref = referencia()
     from nexo_ia import ifc_modelo
     nube, georref = ifc_modelo.a_modelo_si_hace_falta(nube, (ref["P"].min(0) + ref["P"].max(0)) / 2,

@@ -583,6 +583,8 @@
     h += `<table style="margin-top:10px"><thead><tr><th>Nivel</th><th class="n">Medido</th><th class="n">Inferido</th><th class="n">Dudoso</th><th class="n">No constr.</th><th class="n">No observ.</th><th class="n">Avance</th></tr></thead><tbody>` +
       a.por_nivel.map(n => `<tr><td>${e_(n.nivel)}</td><td class="n">${n.construido}</td><td class="n">${n.inferido}</td><td class="n">${n.dudoso}</td><td class="n">${n.no_construido}</td><td class="n">${n.no_observable}</td><td class="n">${num(n.avance_pct, 1)} %</td></tr>`).join("") + `</tbody></table>`;
     const res = d.resumen.concat(inc ? d.resumen_inferidos : []), regs = d.registros.concat(inc ? d.registros_inferidos : []);
+    if(d.limite_evidencia) h += `<div class="ia-caja">${e_(d.limite_evidencia)}<br>Observado: ${num(a.total.observado_pct || 0,1)} % · inferido: ${num(a.total.inferido_pct || 0,1)} % (no aprobado).</div>`;
+    if(d.problemas?.length) h += `<div class="ia-caja ia-mal">${d.problemas.map(e_).join("<br>")}</div>`;
     const total = d.monto_total + (inc ? d.monto_inferidos : 0);
     h += `<div class="lbl" style="margin-top:12px">Propuesta de registro: lo que el dron ve construido y aún no está registrado</div>`;
     if (!res.length) h += '<div class="vacio">Nada nuevo por registrar.</div>';

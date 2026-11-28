@@ -371,6 +371,11 @@ class Manejador(BaseHTTPRequestHandler):
         ruta, q = u.path.rstrip("/").lower(), parse_qs(u.query)
         try:
             n = int(self.headers.get("Content-Length") or 0)
+            if n < 0:
+                raise ValueError("Longitud de petición no válida.")
+            origen = self.headers.get("Origin")
+            if origen and urlparse(origen).netloc != self.headers.get("Host"):
+                raise PermissionError("Origen externo no permitido.")
             if ruta == "/api/admin/publicar":
                 if not TOKEN_ADMIN or not hmac.compare_digest(self.headers.get("X-Nexo-Admin") or "", TOKEN_ADMIN):
                     raise PermissionError("Falta o no coincide X-Nexo-Admin (NEXO_TOKEN_ADMIN).")
@@ -410,6 +415,8 @@ class Manejador(BaseHTTPRequestHandler):
             if n > 2 * 1024 * 1024:
                 raise ValueError("Petición demasiado grande")
             ped = json.loads(self.rfile.read(n) or b"{}")
+            if not isinstance(ped, dict):
+                raise ValueError("Se esperaba un objeto JSON.")
             self.elegir_modelo(q)
             if ruta == "/api/metrado":
                 if not ped.get("simular"):

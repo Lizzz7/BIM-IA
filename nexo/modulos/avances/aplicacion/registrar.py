@@ -18,7 +18,12 @@ def ejecutar(repo: RepositorioRegistros, pedido, partidas, elementos, version, s
         previo = solicitudes[request_id]
         if previo["huella"] != huella:
             raise ValueError("La solicitud ya fue registrada con otro contenido o versión.")
-        return {**previo["respuesta"], "reintento": True}
+        respuesta = dict(previo["respuesta"])
+        ids = previo.get("elementos", [])
+        respuesta["elementos"] = [{"id": i, **actuales["elementos"][str(i)]}
+                                 for i in ids if str(i) in actuales["elementos"]]
+        respuesta["registroGlobal"] = actuales.get("global", "")
+        return {**respuesta, "reintento": True}
     nuevos, r = aplicar(actuales, pedido, partidas, elementos)
     # El lote confirmado es atómico: nada se guarda si una fila es inválida.
     abortado = bool(r["rechazados"]) and not simular
@@ -34,7 +39,10 @@ def ejecutar(repo: RepositorioRegistros, pedido, partidas, elementos, version, s
                  "registroGlobal": nuevos.get("global", ""), "reintento": False}
     if resultado["guardado"]:
         if request_id:
-            solicitudes[request_id] = {"huella": huella, "respuesta": resultado}
+            # No duplicar cadenas completas de historial en cada recibo.
+            resumen = {k: v for k, v in resultado.items() if k not in ("elementos", "registroGlobal")}
+            solicitudes[request_id] = {"huella": huella, "respuesta": resumen,
+                                       "elementos": sorted(r["tocados"])}
             nuevos["_solicitudes"] = solicitudes
         repo.guardar(nuevos)
     return resultado

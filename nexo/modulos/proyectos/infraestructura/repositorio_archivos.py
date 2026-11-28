@@ -320,11 +320,12 @@ def parsear(reg: str):
     return out
 
 
-def ejecutado_por_elemento() -> dict:
+def ejecutado_por_elemento(hasta=None) -> dict:
     out = {}
     for k, n in leer_registros()["elementos"].items():
         acc = {}
-        for _, it, q in parsear(n.get("registro", "")):
-            acc[it] = acc.get(it, 0.0) + q
+        for fecha, it, q in parsear(n.get("registro", "")):
+            if hasta is None or fecha <= hasta:
+                acc[it] = acc.get(it, 0.0) + q
         out[int(k)] = acc
     return out

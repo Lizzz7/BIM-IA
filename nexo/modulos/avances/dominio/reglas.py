@@ -8,6 +8,7 @@ complemento sin guardar nada.
 """
 import json
 import math
+import re
 from datetime import datetime
 
 
@@ -23,6 +24,8 @@ def sumas(reg):
 def aplicar(reg, ped, partidas, elems):
     """Aplica los registros de `ped` sobre una COPIA de `reg`. Devuelve (reg_nuevo, resultado)."""
     try:
+        if not isinstance(ped.get("fecha"), str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", ped["fecha"]):
+            raise ValueError()
         f = datetime.strptime(ped.get("fecha", ""), "%Y-%m-%d")
     except (ValueError, TypeError, AttributeError):
         raise ValueError("Fecha no válida (aaaa-mm-dd).")
@@ -34,6 +37,8 @@ def aplicar(reg, ped, partidas, elems):
     reg.setdefault("global", "")
     E = reg["elementos"]
     for r in ped.get("registros") or []:
+        if not isinstance(r, dict) or isinstance(r.get("id"), bool):
+            raise ValueError("Fila de metrado no válida.")
         rid, item = int(r.get("id") or 0), r.get("item") or ""
         try:
             q = float(r.get("cantidad"))

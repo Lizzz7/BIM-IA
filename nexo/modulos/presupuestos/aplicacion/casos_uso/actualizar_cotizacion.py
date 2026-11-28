@@ -11,4 +11,7 @@ def ejecutar(catalogo: CatalogoPresupuestos, pedido):
                    fecha=pedido.get("fecha", ""), incluye_igv=pedido.get("incluye_igv"),
                    tasa_igv=numero(pedido.get("tasa_igv")), moneda=pedido.get("moneda", "PEN"),
                    alcance=pedido.get("alcance", ""))
-    return cotizar(catalogo.leer(pedido.get("version", "actual")), c)
+    base = catalogo.leer(pedido.get("version", "actual"))
+    if pedido.get("base_sha256") and pedido["base_sha256"] != base["fuente"].get("sha256"):
+        raise ValueError("El presupuesto cambió desde la vista previa. Vuelve a calcular la propuesta.")
+    return cotizar(base, c)

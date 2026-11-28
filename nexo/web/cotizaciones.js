@@ -72,7 +72,7 @@
       box.addEventListener("input",()=>{propuesta=null;$("#apuConfirmar").hidden=true;});
       $("#apuProponer").onclick=ev=>accion(ev.currentTarget,async()=>{
         const p=pedido(),r=await api("/api/presupuestos/cotizar",p);resultado($("#apuPropuesta"),r);
-        propuesta=p;$("#apuConfirmar").hidden=false;$("#apuMensaje").textContent="Propuesta calculada; pendiente de confirmación.";
+        propuesta={...p,base_sha256:r.a.sha256};$("#apuConfirmar").hidden=false;$("#apuMensaje").textContent="Propuesta calculada; pendiente de confirmación.";
       });
       $("#apuConfirmar").onclick=ev=>accion(ev.currentTarget,async()=>{
         if(!propuesta)return;
