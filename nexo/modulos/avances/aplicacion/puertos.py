@@ -1,0 +1,6 @@
+from typing import Protocol
+
+
+class RepositorioRegistros(Protocol):
+    def leer(self) -> dict: ...
+    def guardar(self, registros: dict) -> None: ...

@@ -303,7 +303,8 @@ function estado(cls, msg){ const e = $("#estado"); e.className = "estado " + cls
 function dialogo(html, botones){ return new Promise(res => { $("#dlgCuerpo").innerHTML = html; const b = $("#dlgBotones"); b.innerHTML = "";
   botones.forEach(([txt, val, cls]) => { const x = document.createElement("button"); x.className = "btn " + (cls||""); x.textContent = txt; x.onclick = () => { $("#dlg").close(); res(val); }; b.appendChild(x); });
   $("#dlg").showModal(); }); }
-function ls(k, v){ try{ if(v === undefined) return JSON.parse(localStorage.getItem("nexoNO_" + k)); localStorage.setItem("nexoNO_" + k, JSON.stringify(v)); }catch(e){ return null; } }
+function ls(k, v){ try{ const clave = "nexoNO_" + (S.datos?.nexo?.modelo || S.datos?.modelo || "sin-proyecto") + "_" + k;
+  if(v === undefined) return JSON.parse(localStorage.getItem(clave)); localStorage.setItem(clave, JSON.stringify(v)); }catch(e){ return null; } }
 
 /* calendario de obra: lunes a sábado, sin feriados (del cronograma) */
 const FER = new Set(CRONO ? CRONO.feriados : []);
@@ -666,7 +667,9 @@ function datosVal(n){
 
 /* ---------- valorizaciones creadas: se guardan con sus datos (cabecera, deducciones, metrados) y se pueden editar */
 const VZ = () => ls("valorizaciones") || [];
-function totalVz(v){ const pie = S.datos.pie, cd = r2(Object.entries(v.act).reduce((s,[it,q]) => s + r2(r2(q)*pu(it)), 0));
+const presupuestoVz = v => v?.presupuesto || {partidas:S.partidas, capitulos:S.datos.capitulos, pie:S.datos.pie, version:S.datos.nexo?.version || CRONO?.fuentePresupuesto};
+function totalVz(v){ const pre = presupuestoVz(v), pie = pre.pie, precios = Object.fromEntries(pre.partidas.map(p => [p.item,p.pu]));
+  const cd = r2(Object.entries(v.act).reduce((s,[it,q]) => s + r2(r2(q)*(precios[it]||0)), 0));
   const sub = r2(cd + r2(cd*(pie.gg||0)) + r2(cd*(pie.ut||0))), bruta = r2(sub + r2(sub*(pie.igv||0)));
   return {cd, bruta, neto: r2(bruta - r2(bruta*(parseFloat(v.ded.adel)||0)/100) - r2(bruta*(parseFloat(v.ded.ret)||0)/100) - (parseFloat(v.ded.mat)||0))}; }
 async function formVz(existente){
@@ -692,6 +695,7 @@ async function formVz(existente){
   const g = k => $("#vz_" + k).value;
   v.n = existente ? v.n : +g("n"); v.desde = g("desde"); v.hasta = g("hasta"); v.emision = g("emision"); v.obs = $("#vz_obs").value;
   if(!v.desde || !v.hasta || v.desde > v.hasta) return alert("Revisa el periodo: la fecha «desde» debe ser anterior o igual a «hasta».");
+  if(!v.presupuesto) v.presupuesto = JSON.parse(JSON.stringify(presupuestoVz(null)));
   ["obra","empresa","propietario","ubicacion","residente","supervisor"].forEach(k => v.cab[k] = g(k)); ["adel","mat","ret"].forEach(k => v.ded[k] = g(k));
   if(!existente || $("#vz_recalc")?.checked){       // congela los metrados del periodo
     const ant = {}, act = {}, det = [];
@@ -748,12 +752,12 @@ function cabecera(titulo, sub){ const emp = empresaDoc(), logo = ls("logo");
 function firmas(){ const emp = empresaDoc(); return `<div class="firmas"><div>Residente de obra<br>${esc(emp.residente||"")}</div><div>Supervisión<br>${esc(emp.supervisor||"")}</div><div>Propietario<br>${esc(emp.propietario||"")}</div></div>`; }
 function abrirHoja(titulo, html, campos){ $("#fTitulo").textContent = titulo; $("#fCampos").hidden = !campos; $("#fHoja").innerHTML = html; $("#formato").hidden = false; }
 function formatoHTML(n){
-  const {p, ant, act} = datosVal(n), pie = S.datos.pie, gg = pie.gg||0, ut = pie.ut||0, igv = pie.igv||0, c = S.vz ? S.vz.ded : (ls("formato") || {});
+  const {p, ant, act} = datosVal(n), pre = presupuestoVz(S.vz), pie = pre.pie, gg = pie.gg||0, ut = pie.ut||0, igv = pie.igv||0, c = S.vz ? S.vz.ded : (ls("formato") || {});
   const adel = (parseFloat(c.adel)||0)/100, mat = parseFloat(c.mat)||0, ret = (parseFloat(c.ret)||0)/100;
-  const filas = [...Object.entries(S.datos.capitulos).map(([it, d]) => ({it, d, cap:true})), ...S.partidas.map(x => ({it:x.item, x}))].sort((a,b) => a.it.localeCompare(b.it, "es", {numeric:true}));
+  const filas = [...Object.entries(pre.capitulos).map(([it, d]) => ({it, d, cap:true})), ...pre.partidas.map(x => ({it:x.item, x}))].sort((a,b) => a.it.localeCompare(b.it, "es", {numeric:true}));
   /* Regla S10: metrados a 2 decimales, monto = ROUND(metrado x P.U.; 2), acumulado = anterior + del mes; indirectos redondeados a 2 */
   const linP = x => { const a = r2(ant[x.item]||0), m = r2(act[x.item]||0), aS = r2(a*x.pu), mS = r2(m*x.pu); return {a, m, ac:r2(a+m), aS, mS, acS:r2(aS+mS), pre:r2(x.metrado*x.pu)}; };
-  const tot = it => { const t = {pre:0, ant:0, act:0}; S.partidas.forEach(x => { if(x.item.startsWith(it + ".")){ const l = linP(x); t.pre += l.pre; t.ant += l.aS; t.act += l.mS; } }); return t; };
+  const tot = it => { const t = {pre:0, ant:0, act:0}; pre.partidas.forEach(x => { if(x.item.startsWith(it + ".")){ const l = linP(x); t.pre += l.pre; t.ant += l.aS; t.act += l.mS; } }); return t; };
   let cuerpo = "", T = {pre:0, ant:0, act:0};
   filas.forEach(f => {
     if(f.cap){ const t = tot(f.it); if(!t.pre) return; const ac = t.ant + t.act;
@@ -779,7 +783,7 @@ function formatoHTML(n){
       <tr><td>IGV</td><td class="n">${nf(r2(sub(T.act)*igv))}</td><td class="n">${nf(igv*100,2)}% del subtotal</td></tr><tr class="tot"><td>Valorización bruta del mes</td><td class="n">${nf(bruta)}</td><td></td></tr>
       <tr><td>(-) Amortización de adelanto directo</td><td class="n">${nf(-aAdel)}</td><td class="n">${nf(adel*100,2)}%</td></tr><tr><td>(-) Amortización de adelanto de materiales</td><td class="n">${nf(-mat)}</td><td></td></tr>
       <tr><td>(-) Retención por fondo de garantía</td><td class="n">${nf(-aRet)}</td><td class="n">${nf(ret*100,2)}%</td></tr><tr class="neto"><td>NETO A PAGAR</td><td class="n">${nf(neto)}</td><td></td></tr></tbody></table>
-    <div class="nota2">Gastos generales, utilidad e IGV: presupuesto S10 v2. Amortizaciones y retención: las escribe el usuario. Programado: cronograma (lunes a sábado). «Mayor metrado»: acumulado mayor al contrato.</div>${firmas()}</div>`;
+    <div class="nota2">Presupuesto: ${esc(pre.version || "sin versión")}. ${S.vz?.presupuesto ? "PU e indirectos conservados al crear el documento." : "Vista en vivo; sin garantía retroactiva para documentos antiguos."} Amortizaciones y retención: las escribe el usuario. Programado: cronograma. «Mayor metrado»: acumulado mayor a la referencia.</div>${firmas()}</div>`;
 }
 /*__EXCEL__*/
 function metradosHTML(n){

@@ -20,3 +20,6 @@ NEXO OBRASS/
 Thumbs.db
 desktop.ini
 .env
+
+# Estado local de ramas anteriores: se conserva, pero no se versiona ni migra.
+.nexo-local/

@@ -1,0 +1,281 @@
+[
+ {
+  "escenario": "Fin de mes 3 (sótanos)",
+  "puntos": 258541,
+  "construidos_reales": 37,
+  "construidos_ocultos": 0,
+  "exactitud": 1.0,
+  "precision": 1.0,
+  "exhaustividad": 1.0,
+  "decididos": 1130,
+  "sin_decidir": {
+   "construido": 7,
+   "no_construido": 129
+  },
+  "matriz": {
+   "vp": 30,
+   "fp": 0,
+   "fn": 0,
+   "vn": 1100
+  },
+  "alertas": {
+   "sembradas": 2,
+   "detectadas": 2,
+   "total": 2,
+   "correctas": 2,
+   "falsas_alarmas": 0,
+   "no_detectadas": []
+  },
+  "error_alineacion": {
+   "traslacion_m": 0.2605,
+   "giro_grados": 1.0281
+  },
+  "avance_pct": 6.5,
+  "monto_propuesto": 30173.16,
+  "segundos": 16.8,
+  "errores": []
+ },
+ {
+  "escenario": "Fin de mes 6 (base)",
+  "puntos": 534642,
+  "construidos_reales": 192,
+  "construidos_ocultos": 43,
+  "exactitud": 0.9991,
+  "precision": 1.0,
+  "exhaustividad": 0.9931,
+  "decididos": 1084,
+  "sin_decidir": {
+   "construido": 47,
+   "no_construido": 135
+  },
+  "matriz": {
+   "vp": 144,
+   "fp": 0,
+   "fn": 1,
+   "vn": 939
+  },
+  "alertas": {
+   "sembradas": 2,
+   "detectadas": 2,
+   "total": 2,
+   "correctas": 2,
+   "falsas_alarmas": 0,
+   "no_detectadas": []
+  },
+  "error_alineacion": {
+   "traslacion_m": 0.0012,
+   "giro_grados": 0.0214
+  },
+  "avance_pct": 33.3,
+  "monto_propuesto": 304495.68,
+  "segundos": 17.7,
+  "errores": [
+   {
+    "id": 394670,
+    "grupo": "CIMM",
+    "nivel": "00.01. SOTANO 2",
+    "real": "construido",
+    "estado": "no_construido",
+    "cobertura_visible": 0.065,
+    "visible": 0.414
+   }
+  ]
+ },
+ {
+  "escenario": "Fin de mes 6 · ruido 4 cm, 30 % huecos",
+  "puntos": 486716,
+  "construidos_reales": 153,
+  "construidos_ocultos": 0,
+  "exactitud": 0.9991,
+  "precision": 1.0,
+  "exhaustividad": 0.993,
+  "decididos": 1113,
+  "sin_decidir": {
+   "construido": 10,
+   "no_construido": 143
+  },
+  "matriz": {
+   "vp": 142,
+   "fp": 0,
+   "fn": 1,
+   "vn": 970
+  },
+  "alertas": {
+   "sembradas": 2,
+   "detectadas": 2,
+   "total": 2,
+   "correctas": 2,
+   "falsas_alarmas": 0,
+   "no_detectadas": []
+  },
+  "error_alineacion": {
+   "traslacion_m": 0.0026,
+   "giro_grados": 0.0461
+  },
+  "avance_pct": 32.9,
+  "monto_propuesto": 418507.6,
+  "segundos": 17.2,
+  "errores": [
+   {
+    "id": 394670,
+    "grupo": "CIMM",
+    "nivel": "00.01. SOTANO 2",
+    "real": "construido",
+    "estado": "no_construido",
+    "cobertura_visible": 0.047,
+    "visible": 0.402
+   }
+  ]
+ },
+ {
+  "escenario": "Fin de mes 9 (casco alto)",
+  "puntos": 773888,
+  "construidos_reales": 791,
+  "construidos_ocultos": 185,
+  "exactitud": 1.0,
+  "precision": 1.0,
+  "exhaustividad": 1.0,
+  "decididos": 1031,
+  "sin_decidir": {
+   "construido": 161,
+   "no_construido": 74
+  },
+  "matriz": {
+   "vp": 630,
+   "fp": 0,
+   "fn": 0,
+   "vn": 401
+  },
+  "alertas": {
+   "sembradas": 1,
+   "detectadas": 1,
+   "total": 1,
+   "correctas": 1,
+   "falsas_alarmas": 0,
+   "no_detectadas": []
+  },
+  "error_alineacion": {
+   "traslacion_m": 0.0025,
+   "giro_grados": 0.0
+  },
+  "avance_pct": 69.4,
+  "monto_propuesto": 773928.53,
+  "segundos": 19.7,
+  "errores": []
+ },
+ {
+  "escenario": "Fin de mes 9 · sin oclusión (cota superior)",
+  "puntos": 1409834,
+  "construidos_reales": 791,
+  "construidos_ocultos": 0,
+  "exactitud": 1.0,
+  "precision": 1.0,
+  "exhaustividad": 1.0,
+  "decididos": 1191,
+  "sin_decidir": {
+   "construido": 0,
+   "no_construido": 75
+  },
+  "matriz": {
+   "vp": 791,
+   "fp": 0,
+   "fn": 0,
+   "vn": 400
+  },
+  "alertas": {
+   "sembradas": 1,
+   "detectadas": 1,
+   "total": 1,
+   "correctas": 1,
+   "falsas_alarmas": 0,
+   "no_detectadas": []
+  },
+  "error_alineacion": {
+   "traslacion_m": 0.0014,
+   "giro_grados": 0.052
+  },
+  "avance_pct": 82.7,
+  "monto_propuesto": 1435735.29,
+  "segundos": 29.1,
+  "errores": []
+ },
+ {
+  "escenario": "Fin de mes 6 · sin alinear (control)",
+  "puntos": 534642,
+  "construidos_reales": 192,
+  "construidos_ocultos": 43,
+  "exactitud": 0.9927,
+  "precision": 0.9858,
+  "exhaustividad": 0.9586,
+  "decididos": 1089,
+  "sin_decidir": {
+   "construido": 47,
+   "no_construido": 130
+  },
+  "matriz": {
+   "vp": 139,
+   "fp": 2,
+   "fn": 6,
+   "vn": 942
+  },
+  "alertas": {
+   "sembradas": 2,
+   "detectadas": 2,
+   "total": 3,
+   "correctas": 2,
+   "falsas_alarmas": 1,
+   "no_detectadas": []
+  },
+  "error_alineacion": null,
+  "avance_pct": 32.6,
+  "monto_propuesto": 297202.86,
+  "segundos": 15.2,
+  "errores": [
+   {
+    "id": 394670,
+    "grupo": "CIMM",
+    "nivel": "00.01. SOTANO 2",
+    "real": "construido",
+    "estado": "no_construido",
+    "cobertura_visible": 0.063,
+    "visible": 0.424
+   },
+   {
+    "id": 394672,
+    "grupo": "CIMM",
+    "nivel": "00.01. SOTANO 2",
+    "real": "construido",
+    "estado": "no_construido",
+    "cobertura_visible": 0.038,
+    "visible": 0.351
+   },
+   {
+    "id": 398738,
+    "grupo": "ZAP",
+    "nivel": "00.02. SOTANO 1",
+    "real": "construido",
+    "estado": "no_construido",
+    "cobertura_visible": 0.133,
+    "visible": 0.507
+   },
+   {
+    "id": 405301,
+    "grupo": "COL",
+    "nivel": "00.03. SEMISOTANO",
+    "real": "no construido",
+    "estado": "construido",
+    "cobertura_visible": 0.469,
+    "visible": 1.0
+   },
+   {
+    "id": 438519,
+    "grupo": "VIG",
+    "nivel": "00.03. SEMISOTANO",
+    "real": "construido",
+    "estado": "no_construido",
+    "cobertura_visible": 0.135,
+    "visible": 1.0
+   }
+  ]
+ }
+]

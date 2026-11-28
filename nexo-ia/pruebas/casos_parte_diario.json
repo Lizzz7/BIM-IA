@@ -1,0 +1,243 @@
+{
+ "nota": "Casos iniciales escritos para la demo. Civil debe revisar la respuesta esperada y agregar casos reales de parte diario. Los 5 últimos (ordinales, «lado», cimentación sin nivel) se agregaron tras probar frases de obra.",
+ "casos": [
+  {
+   "texto": "Hoy se vació columnas y placas del piso 3 sector A",
+   "esperado": [
+    {
+     "paquete": "T06",
+     "sector": "A",
+     "grupos": [
+      "COL",
+      "PLA"
+     ],
+     "clase": "concreto",
+     "porcentaje": 100
+    }
+   ]
+  },
+  {
+   "texto": "Encofrado del techo del piso 2 sector B al 50%",
+   "esperado": [
+    {
+     "paquete": "T05",
+     "sector": "B",
+     "grupos": [
+      "ALI",
+      "ESC",
+      "LMA",
+      "VCH",
+      "VIG"
+     ],
+     "clase": "encofrado",
+     "porcentaje": 50
+    }
+   ]
+  },
+  {
+   "texto": "Habilitado de acero de vigas del techo del piso 5",
+   "esperado": [
+    {
+     "paquete": "T08",
+     "sector": "ambos",
+     "grupos": [
+      "VIG"
+     ],
+     "clase": "acero",
+     "porcentaje": 100
+    }
+   ]
+  },
+  {
+   "texto": "Se colocó el acero de las columnas del piso 1, sector B",
+   "esperado": [
+    {
+     "paquete": "T04",
+     "sector": "B",
+     "grupos": [
+      "COL"
+     ],
+     "clase": "acero",
+     "porcentaje": 100
+    }
+   ]
+  },
+  {
+   "texto": "Vaciado de losa aligerada y vigas del techo del piso 4 sector A",
+   "esperado": [
+    {
+     "paquete": "T07",
+     "sector": "A",
+     "grupos": [
+      "ALI",
+      "VIG"
+     ],
+     "clase": "concreto",
+     "porcentaje": 100
+    }
+   ]
+  },
+  {
+   "texto": "Encofrado de placas piso 6 sector A, se avanzó la mitad",
+   "esperado": [
+    {
+     "paquete": "T09",
+     "sector": "A",
+     "grupos": [
+      "PLA"
+     ],
+     "clase": "encofrado",
+     "porcentaje": 50
+    }
+   ]
+  },
+  {
+   "texto": "Ladrillo de techo del piso 5 sector A completo",
+   "esperado": [
+    {
+     "paquete": "T08",
+     "sector": "A",
+     "grupos": [
+      "ALI"
+     ],
+     "clase": "ladrillo",
+     "porcentaje": 100
+    }
+   ]
+  },
+  {
+   "texto": "Llovió toda la mañana, no se trabajó",
+   "esperado": []
+  },
+  {
+   "texto": "Vaciamos las columnas del 2do piso, lado A",
+   "esperado": [
+    {
+     "paquete": "T05",
+     "sector": "A",
+     "grupos": [
+      "COL"
+     ],
+     "clase": "concreto",
+     "porcentaje": 100
+    }
+   ]
+  },
+  {
+   "texto": "Fierro de columnas y placas del piso 7 al 30% en el sector B; además encofrado de vigas chatas del techo del piso 7 sector B",
+   "esperado": [
+    {
+     "paquete": "T10",
+     "sector": "B",
+     "grupos": [
+      "COL",
+      "PLA"
+     ],
+     "clase": "acero",
+     "porcentaje": 30
+    },
+    {
+     "paquete": "T10",
+     "sector": "B",
+     "grupos": [
+      "VCH"
+     ],
+     "clase": "encofrado",
+     "porcentaje": 100
+    }
+   ]
+  },
+  {
+   "texto": "Se terminó el vaciado de la escalera del techo del piso 1 sector B",
+   "esperado": [
+    {
+     "paquete": "T04",
+     "sector": "B",
+     "grupos": [
+      "ESC"
+     ],
+     "clase": "concreto",
+     "porcentaje": 100
+    }
+   ]
+  },
+  {
+   "texto": "Encofrado de columnas del semisótano sector A",
+   "esperado": [
+    {
+     "paquete": "T03",
+     "sector": "A",
+     "grupos": [
+      "COL"
+     ],
+     "clase": "encofrado",
+     "porcentaje": 100
+    }
+   ]
+  },
+  {
+   "texto": "Se vació la losa del 3er piso",
+   "esperado": [
+    {
+     "paquete": "T06",
+     "sector": "ambos",
+     "grupos": [
+      "ALI",
+      "ESC",
+      "LMA",
+      "VCH",
+      "VIG"
+     ],
+     "clase": "concreto",
+     "porcentaje": 100
+    }
+   ]
+  },
+  {
+   "texto": "Encofrado de vigas segundo piso sector A al 50%",
+   "esperado": [
+    {
+     "paquete": "T05",
+     "sector": "A",
+     "grupos": [
+      "VIG"
+     ],
+     "clase": "encofrado",
+     "porcentaje": 50
+    }
+   ]
+  },
+  {
+   "texto": "Vaciado de placas del primer piso",
+   "esperado": [
+    {
+     "paquete": "T04",
+     "sector": "ambos",
+     "grupos": [
+      "PLA"
+     ],
+     "clase": "concreto",
+     "porcentaje": 100
+    }
+   ]
+  },
+  {
+   "texto": "Vaciado de zapatas sector B",
+   "esperado": [
+    {
+     "paquete": "CIM",
+     "sector": "B",
+     "grupos": [
+      "ZAP"
+     ],
+     "clase": "concreto",
+     "porcentaje": 100
+    }
+   ]
+  },
+  {
+   "texto": "Avance de zapatas",
+   "esperado": []
+  }
+ ]
+}
