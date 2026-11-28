@@ -1,4 +1,4 @@
-/* NEXO OBRA · capa de IA integrada en el panel (lo inyecta servidor.py; el index.html del repo no cambia).
+/* NEXO OBRA · capa de IA integrada en el panel (lo inyecta nexo.api.http; el index.html del repo no cambia).
    Se engancha a las funciones del panel: pControl, pParte, pValorizaciones, pConfig, resaltar, ir, cargarDatos. */
 (function () {
   "use strict";
