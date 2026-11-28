@@ -7,10 +7,18 @@
   const sol = x => x == null ? "—" : "S/ " + Number(x).toLocaleString("es-PE", {minimumFractionDigits: 2, maximumFractionDigits: 2});
   const num = (x, d = 2) => Number(x).toLocaleString("es-PE", {minimumFractionDigits: d, maximumFractionDigits: d});
   const IA = {aud: null, estado: null, filtro: "", abiertos: {}, narr: {}, parte: null, verTodos: false, dron: null, dronSim: null, dronInf: false, ifc: null, desdeIfc: true};
+  const solicitudes = new Map();
   async function pide(ruta, cuerpo) {
+    let clave;
+    if(ruta === "/api/metrado" && cuerpo && !cuerpo.simular){
+      clave = JSON.stringify(cuerpo);
+      if(!solicitudes.has(clave)) solicitudes.set(clave,crypto.randomUUID());
+      cuerpo = {...cuerpo,request_id:solicitudes.get(clave)};
+    }
     const r = await fetch(ruta, cuerpo ? {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cuerpo)} : {});
     const j = await r.json().catch(() => ({ok: false, error: "respuesta no válida"}));
     if (!r.ok || j.ok === false) throw new Error(j.error || "HTTP " + r.status);
+    if(clave) solicitudes.delete(clave);
     return j;
   }
   const aviso = m => { try { if (typeof toast === "function") toast(m); } catch (_) {} };

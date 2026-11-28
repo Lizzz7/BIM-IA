@@ -36,6 +36,7 @@ from nexo_ia import (auditor, bitacora, consultas, costos, escaneo, exportar, if
                      simulacion, sintetico)
 from nexo_ia.metrado import guardar_registros, registrar, sumas  # noqa: F401  (se re-exportan: pruebas y scripts)
 from nexo_ia import datos as D
+from nexo import bootstrap
 
 AQUI = Path(__file__).resolve().parents[2] / "nexo-ia"
 JS = Path(__file__).resolve().parents[1] / "web" / "nexo_ia.js"
@@ -188,7 +189,7 @@ def cacheado(nombre, clave, generar):
 
 def panel_html():
     html = D.PANEL.read_text(encoding="utf-8")
-    inyeccion = '<script src="/ia/nexo_ia.js"></script>\n'
+    inyeccion = '<script src="/ia/nexo_ia.js"></script>\n<script src="/ia/cotizaciones.js"></script>\n'
     i = html.lower().rfind("</body>")
     return (html[:i] + inyeccion + html[i:]) if i >= 0 else html + inyeccion
 
@@ -282,6 +283,16 @@ class Manejador(BaseHTTPRequestHandler):
                                    "text/html; charset=utf-8", extra=extra)
             elif ruta == "/ia/nexo_ia.js":
                 self._enviar(200, JS.read_bytes(), "application/javascript; charset=utf-8")
+            elif ruta == "/ia/cotizaciones.js":
+                self._enviar(200, (JS.parent / "cotizaciones.js").read_bytes(), "application/javascript; charset=utf-8")
+            elif ruta == "/api/presupuestos":
+                self._enviar(200, {"ok": True, "versiones": bootstrap.catalogo_presupuestos().listar()})
+            elif ruta == "/api/presupuestos/comparar":
+                self._enviar(200, bootstrap.comparar_presupuestos((q.get("a") or ["actual"])[0],
+                                                                 (q.get("b") or ["actual"])[0]))
+            elif ruta == "/api/presupuestos/recursos":
+                p = bootstrap.catalogo_presupuestos().leer((q.get("version_presupuesto") or ["actual"])[0])
+                self._enviar(200, {"ok": True, "fuente": p["fuente"], "recursos": list(p["recursos"].values())})
             elif ruta == "/api/ping":
                 self._enviar(200, {"ok": True, "version": "nexo-ia", "modelo": m.id, "version_modelo": m.version})
             elif ruta == "/api/datos":
@@ -405,6 +416,11 @@ class Manejador(BaseHTTPRequestHandler):
                     self.exigir_escritura()
                 ped["_usuario"] = self.ip()
                 self._enviar(200, registrar(ped))
+            elif ruta == "/api/presupuestos/cotizar":
+                self._enviar(200, bootstrap.proponer_cotizacion(ped))
+            elif ruta == "/api/presupuestos/cotizar/confirmar":
+                self.exigir_escritura()
+                self._enviar(200, bootstrap.guardar_cotizacion(ped))
             elif ruta == "/api/ia/narrar":
                 limitar(self.ip())
                 self._enviar(200, {"ok": True, **narrador.narrar(hallazgo_por_id(ped["id"]), forzar=bool(ped.get("forzar")) and self.puede_escribir())})
