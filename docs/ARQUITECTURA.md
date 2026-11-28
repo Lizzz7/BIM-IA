@@ -28,6 +28,24 @@ contexto, funciones y configuración. Se conservan imports históricos, pruebas,
 `nexo-ia/nexo_ia/ifc_modelo.py` y `7_Dron/nube_desde_ifc.py`.
 La implementación IFC está en `nexo/integraciones/ifc/modelo.py`.
 El panel original no se reescribe: la API inyecta `nexo/web/nexo_ia.js`.
+Las mejoras puntuales de congelación de precios e indirectos se aplican también
+al panel fuente y su Excel; el index generado se regenera con el script existente.
+
+## Casos extraídos
+
+- `avances/dominio/reglas.py`: validación pura con partidas/elementos explícitos.
+- `avances/aplicacion/registrar.py`: caso de uso con puerto de repositorio,
+  idempotencia y rechazo atómico de lotes inválidos. Fachada histórica conserva
+  `aplicar()` para simulaciones.
+- `presupuestos/dominio/`: valores monetarios, cotización y comparación exacta.
+- `presupuestos/aplicacion/casos_uso/`: comparación y cotización documentada.
+- `presupuestos/infraestructura/`: catálogo Excel autorizado y revisiones JSON.
+- `evidencia_bim/dominio/reglas.py`: fecha, capacidad de propuesta y actividades
+  observables, sin dependencias geométricas.
+
+No hay event bus, event sourcing, ORM ni entidades ornamentales. Los servicios
+geométricos complejos se preservan en aplicación/adaptadores; extraer más puertos
+queda como evolución, no se oculta la deuda de sus dependencias heredadas.
 
 ## Persistencia: ninguna migración
 

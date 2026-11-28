@@ -1,5 +1,14 @@
 # NEXO OBRA · capa de IA (Reto 3 · Hackathon BIM + IA UNSA 2026)
 
+> **Integración DDD:** la implementación ahora vive en `../nexo/`, con fachadas
+> compatibles en `nexo_ia/`. Arranque recomendado desde la raíz:
+> `python -m nexo.bootstrap`. Consulta `../README.md` y `../docs/ARQUITECTURA.md`.
+> No se migró la persistencia. Docker requiere la raíz como contexto:
+> `docker build -f nexo-ia/Dockerfile -t nexo-ia .`.
+> Las métricas de escaneo de este documento corresponden al comparador heredado
+> y a datos sintéticos. Las propuestas actuales se limitan al concreto y separan
+> observado/inferido. Reejecutar evaluaciones antes de citar importes.
+
 IA integrada **dentro** del panel de valorizaciones NEXO OBRA, sin Revit y sin tocar el repo `BIM-IA`.
 Soporta **varias obras y versiones de modelo**, y se puede publicar como link (PC y celular).
 
